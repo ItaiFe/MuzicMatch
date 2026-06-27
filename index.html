@@ -124,14 +124,58 @@
   .ytmount.on{display:block}
   .ytmount iframe{width:100%;height:100%;border:0}
   .art.playing .vinyl,.art.playing .flag,.art.playing .rank,.art.playing canvas{visibility:hidden}
+
+  .login{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;
+         padding:30px;background:linear-gradient(180deg,#2B1F38,#5A3A52 55%,#C97A4A);color:var(--cream)}
+  .login .brand{font-weight:800;letter-spacing:.14em;font-size:13px;opacity:.85;text-transform:uppercase}
+  .login h1{font-size:30px;font-weight:900;margin:6px 0 2px;text-align:center}
+  .login p{opacity:.85;font-size:14px;margin:0 0 22px;text-align:center;max-width:300px}
+  .login .field{width:100%;max-width:320px;margin-bottom:12px}
+  .login label{display:block;font-size:12px;font-weight:700;opacity:.8;margin:0 0 5px 2px;text-transform:uppercase;letter-spacing:.05em}
+  .login input{width:100%;padding:13px 15px;border-radius:14px;border:1px solid #ffffff44;background:#ffffff18;
+         color:var(--cream);font-size:16px;outline:none}
+  .login input::placeholder{color:#ffffff77}
+  .login input:focus{border-color:var(--gold);background:#ffffff22}
+  .login .go{width:100%;max-width:320px;margin-top:8px;background:var(--gold);color:#3a2410;border:none;
+         border-radius:14px;padding:14px;font-weight:800;font-size:16px;cursor:pointer;box-shadow:var(--shadow)}
+  .login .go:disabled{opacity:.6;cursor:default}
+  .login .err{color:#FFD3C9;font-size:13px;font-weight:700;min-height:18px;margin-top:10px;text-align:center}
+  .whoami{font-size:12px;opacity:.85;margin-top:4px}
+  .whoami a{color:var(--gold);cursor:pointer;text-decoration:underline}
+
+  .tabbtn{background:#ffffff22;color:var(--cream);border:1px solid #ffffff44;border-radius:999px;
+          padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer}
+  .tabbtn.active{background:var(--gold);color:#3a2410;border-color:var(--gold)}
+  .ppl{width:100%;max-width:420px;text-align:left;margin-top:8px}
+  .person{background:#ffffff14;border:1px solid #ffffff22;border-radius:14px;padding:12px 14px;margin-bottom:10px}
+  .person h4{margin:0 0 6px;font-size:15px;font-weight:800;display:flex;justify-content:space-between}
+  .person .cnt{font-size:12px;font-weight:700;color:var(--gold)}
+  .person .songs{font-size:12.5px;opacity:.85;line-height:1.5}
 </style>
 </head>
 <body>
+<div class="login" id="login">
+  <div class="brand">Midburn Sounds</div>
+  <h1>Welcome to camp</h1>
+  <p>Enter the camp passphrase and your name to start voting on the playlist.</p>
+  <div class="field">
+    <label for="loginName">Your name</label>
+    <input id="loginName" type="text" placeholder="e.g. Maya" autocomplete="off" maxlength="40">
+  </div>
+  <div class="field">
+    <label for="loginPass">Camp passphrase</label>
+    <input id="loginPass" type="password" placeholder="ask your camp lead" autocomplete="off">
+  </div>
+  <button class="go" id="loginGo">Let me in →</button>
+  <div class="err" id="loginErr"></div>
+</div>
+
 <div class="app">
   <header>
     <div class="brand">Midburn Sounds</div>
     <div class="title">Swipe the Playlist</div>
     <div class="sub">Right if it bangs, left if it doesn't</div>
+    <div class="whoami" id="whoami"></div>
     <div class="counters">
       <div class="pill">Seen <b id="cSeen">0</b></div>
       <div class="pill liked">Liked <b id="cLiked">0</b></div>
@@ -154,10 +198,12 @@
       <div class="sub" style="color:var(--cream)" id="resCount"></div>
       <div class="actions">
         <button class="cta" id="copyList">Copy list</button>
+        <button class="cta ghost" id="campVotes">See everyone's votes</button>
         <button class="cta ghost" id="backToSwipe">Keep swiping</button>
-        <button class="cta ghost" id="resetAll">Reset everything</button>
+        <button class="cta ghost" id="resetAll">Reset my swipes</button>
       </div>
       <div class="list" id="list"></div>
+      <div class="ppl" id="ppl"></div>
     </div>
   </div>
 
@@ -177,6 +223,46 @@
 let ytApiReady=false;
 window.onYouTubeIframeAPIReady=function(){ytApiReady=true;};
 (function(){var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);})();
+
+/* ---------- Auth state ---------- */
+let AUTH=null;   // { token, name }
+function loadAuth(){try{AUTH=JSON.parse(localStorage.getItem('mb_auth')||'null');}catch(e){AUTH=null;}}
+function saveAuth(){try{localStorage.setItem('mb_auth',JSON.stringify(AUTH));}catch(e){}}
+function logout(){AUTH=null;try{localStorage.removeItem('mb_auth');}catch(e){}location.reload();}
+
+async function doLogin(){
+  const name=document.getElementById('loginName').value.trim();
+  const passphrase=document.getElementById('loginPass').value;
+  const err=document.getElementById('loginErr');
+  const btn=document.getElementById('loginGo');
+  err.textContent='';
+  if(!name){err.textContent='Enter your name';return;}
+  if(!passphrase){err.textContent='Enter the camp passphrase';return;}
+  btn.disabled=true;btn.textContent='Checking…';
+  try{
+    const res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,passphrase})});
+    const data=await res.json();
+    if(!data.ok){err.textContent=data.error==='wrong passphrase'?'That passphrase isn\'t right':(data.error||'Login failed');btn.disabled=false;btn.textContent='Let me in →';return;}
+    AUTH={token:data.token,name:data.name};saveAuth();
+    document.getElementById('login').style.display='none';
+    startApp();
+  }catch(e){err.textContent='Network error — try again';btn.disabled=false;btn.textContent='Let me in →';}
+}
+
+function showWhoami(){
+  const w=document.getElementById('whoami');
+  if(AUTH&&AUTH.name){w.innerHTML='Voting as <b>'+AUTH.name.replace(/[<>&]/g,'')+'</b> · <a id="logoutLink">not you?</a>';
+    const l=document.getElementById('logoutLink');if(l)l.onclick=logout;}
+}
+
+/* send a vote to the central store (best-effort, non-blocking) */
+async function sendVote(song,choice){
+  if(!AUTH||!AUTH.token)return;
+  try{
+    await fetch('/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({token:AUTH.token,song:song.s,artist:song.a,choice})});
+  }catch(e){/* offline-tolerant: local state still updates */}
+}
 
 /* ---------- Song pool: popular tracks from around the world ---------- */
 const SONGS = [
@@ -230,14 +316,25 @@ function shuffle(arr){const a=arr.slice();for(let i=a.length-1;i>0;i--){const j=
 function load(){try{const d=JSON.parse(localStorage.getItem('mb_swipe')||'{}');liked=d.liked||[];seen=d.seen||0;leftCount=d.left||0;}catch(e){}}
 function save(){try{localStorage.setItem('mb_swipe',JSON.stringify({liked,seen,left:leftCount}));}catch(e){}}
 
-function init(){
+function startApp(){
   load();
   loadIdCache();
   order=shuffle(SONGS.map((_,i)=>i));
   idx=0; history=[];
+  showWhoami();
   renderCounters(); buildDeck();
   $('empty').style.display='none'; $('results').style.display='none';
   $('deck').style.display='block'; $('controls').style.display='flex'; $('hint').style.display='block';
+}
+
+function init(){
+  loadAuth();
+  if(AUTH&&AUTH.token){
+    document.getElementById('login').style.display='none';
+    startApp();
+  }else{
+    document.getElementById('login').style.display='flex';
+  }
 }
 
 function renderCounters(){$('cSeen').textContent=seen;$('cLiked').textContent=liked.length;$('cLeft').textContent=leftCount;}
@@ -433,6 +530,7 @@ function decide(dir){
   history.push({idx,dir,songIdx});
   if(dir===1){if(!liked.includes(songIdx))liked.push(songIdx);toast('♥ Added to the camp playlist');}
   else{leftCount++;}
+  sendVote(SONGS[songIdx],dir===1?'like':'skip');
   seen++; idx++; save(); renderCounters();
 }
 
@@ -462,6 +560,7 @@ $('reshuffle').onclick=()=>{order=shuffle(SONGS.map((_,i)=>i));idx=0;history=[];
 function showResults(){
   stopAudio();
   $('deck').style.display='none';$('empty').style.display='none';$('controls').style.display='none';$('hint').style.display='none';
+  $('ppl').innerHTML='';$('list').style.display='';
   const r=$('results');r.style.display='flex';
   $('resCount').textContent=liked.length?`${liked.length} track${liked.length>1?'s':''} made the cut`:'Nothing liked yet — go swipe some!';
   const list=$('list');list.innerHTML='';
@@ -480,11 +579,65 @@ $('copyList').onclick=()=>{
   navigator.clipboard?.writeText(txt).then(()=>toast('Playlist copied!'),()=>fallbackCopy(txt));
 };
 function fallbackCopy(txt){const t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);t.select();try{document.execCommand('copy');toast('Playlist copied!');}catch(e){toast('Copy failed');}t.remove();}
-$('resetAll').onclick=()=>{if(confirm('Reset all swipes and the playlist for everyone on this device?')){liked=[];seen=0;leftCount=0;save();init();toast('Reset done');}};
+$('resetAll').onclick=()=>{if(confirm('Reset your swipes on this device? (Your votes already sent to the camp tally stay counted.)')){liked=[];seen=0;leftCount=0;save();startApp();toast('Reset done');}};
 
 /* ---------- Toast ---------- */
 let toastT;
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),1600);}
+
+/* ---------- Camp-wide votes ---------- */
+$('campVotes').onclick=async()=>{
+  if(!AUTH||!AUTH.token){toast('Please log in');return;}
+  const ppl=$('ppl');const list=$('list');
+  list.style.display='none';
+  ppl.innerHTML='<div style="opacity:.8;text-align:center;padding:20px">Loading everyone\'s votes…</div>';
+  try{
+    const res=await fetch('/api/results?token='+encodeURIComponent(AUTH.token));
+    const data=await res.json();
+    if(!data.ok){ppl.innerHTML='<div style="opacity:.8;text-align:center;padding:20px">Couldn\'t load votes ('+(data.error||'error')+')</div>';return;}
+    renderCampVotes(data);
+  }catch(e){ppl.innerHTML='<div style="opacity:.8;text-align:center;padding:20px">Network error loading votes</div>';}
+};
+
+function renderCampVotes(data){
+  const ppl=$('ppl');
+  const esc=s=>String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+  $('resCount').textContent=`${data.voters.length} ${data.voters.length===1?'person has':'people have'} voted`;
+  let html='';
+  // Top songs by likes
+  if(data.songs.length){
+    html+='<h3 style="font-size:16px;font-weight:800;margin:6px 0 10px">🔥 Top songs by likes</h3>';
+    data.songs.slice(0,15).forEach((s,i)=>{
+      if(s.likes===0)return;
+      html+=`<div class="person"><h4><span>${i+1}. ${esc(s.song)}</span><span class="cnt">♥ ${s.likes}${s.skips?' · ✕ '+s.skips:''}</span></h4>`;
+      if(s.likedBy.length)html+=`<div class="songs">liked by ${s.likedBy.map(esc).join(', ')}</div>`;
+      html+='</div>';
+    });
+  }
+  // Per person
+  const names=Object.keys(data.byPerson).sort();
+  if(names.length){
+    html+='<h3 style="font-size:16px;font-weight:800;margin:18px 0 10px">🎧 By person</h3>';
+    names.forEach(n=>{
+      const p=data.byPerson[n];
+      html+=`<div class="person"><h4><span>${esc(n)}</span><span class="cnt">♥ ${p.likes.length}</span></h4>`;
+      if(p.likes.length)html+=`<div class="songs">${p.likes.map(esc).join(' · ')}</div>`;
+      else html+='<div class="songs" style="opacity:.6">no likes yet</div>';
+      html+='</div>';
+    });
+  }
+  if(!html)html='<div style="opacity:.8;text-align:center;padding:20px">No votes yet — be the first!</div>';
+  ppl.innerHTML=html;
+}
+
+/* when leaving camp-votes back to personal list, restore it */
+const _origBack=$('backToSwipe').onclick;
+$('backToSwipe').onclick=()=>{$('ppl').innerHTML='';$('list').style.display='';if(_origBack)_origBack();};
+
+/* ---------- Login wiring ---------- */
+document.getElementById('loginGo').onclick=doLogin;
+document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+document.getElementById('loginName').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('loginPass').focus();});
 
 init();
 </script>

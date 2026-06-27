@@ -27,12 +27,18 @@ You need a free Vercel account: https://vercel.com/signup
 | Name             | Value                                  | Required |
 |------------------|----------------------------------------|----------|
 | `YT_API_KEY`     | your YouTube Data API v3 key           | yes      |
+| `CAMP_PASSPHRASE`| the shared passphrase people type to get in | yes |
+| `CAMP_SECRET`    | any long random string (signs login tokens) | yes |
 | `ALLOWED_ORIGIN` | your live URL, e.g. `https://midburn-sounds.vercel.app` | recommended |
 
-Set both for the **Production** environment. `ALLOWED_ORIGIN` makes the
-search endpoint reject calls from any other website, so people can't
-borrow your endpoint (and your quota) from their own pages. Leave it
-unset while testing, then add it once you know the final URL and redeploy.
+Plus the KV storage variables, which Vercel adds automatically when you
+connect a KV/Upstash store (see "Central vote storage" below):
+`KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+
+Set them all for the **Production** environment. `CAMP_SECRET` can be any
+random string — generate one with `openssl rand -hex 32` or just mash the
+keyboard; it only needs to stay constant and secret. `ALLOWED_ORIGIN`
+makes the API reject calls from other websites.
 
 ### Option A — drag & drop (no tools)
 
@@ -69,6 +75,43 @@ vercel --prod            # deploy to the live URL
 
 > Because the key now runs server-side, you do not need referrer
 > restrictions and the key is never visible to users.
+
+---
+
+## Central vote storage (Vercel KV)
+
+The login + voting feature stores everyone's choices centrally so you can
+see the whole camp's votes in one place. It uses a Redis-compatible KV
+store via REST — either Vercel KV or Upstash.
+
+### Set it up (about 2 minutes)
+
+1. In your Vercel project: **Storage -> Create Database -> KV** (or
+   **Marketplace -> Upstash**). Give it a name, create it.
+2. **Connect it to this project.** Vercel injects the credentials as
+   environment variables (`KV_REST_API_URL`, `KV_REST_API_TOKEN`).
+3. Redeploy so the functions pick them up.
+
+No schema, no tables. The code creates keys on the fly:
+- `song:<title — artist>` : a hash of `name -> like|skip` (one entry per
+  person per song, so re-swiping just overwrites)
+- `voters` : a set of everyone who has logged in and voted
+
+If the KV variables aren't set, the login screen still works but
+voting/results return "storage not configured."
+
+### How login works
+
+- Everyone enters the **camp passphrase** (checked server-side against
+  `CAMP_PASSPHRASE`) plus their **name**.
+- On success the server returns a signed token (HMAC with `CAMP_SECRET`).
+  The browser stores it and sends it with each vote, so the server knows
+  the vote came from someone who passed the passphrase — no accounts and
+  no session database.
+- Names are self-declared: this is attribution for a camp, not secure
+  identity. Anyone could type any name. That's expected and fine here.
+- "See everyone's votes" shows top songs by likes plus a per-person
+  breakdown, pulled live from the store.
 
 ---
 
