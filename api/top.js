@@ -18,7 +18,7 @@ async function blob() {
 }
 
 const CACHE_HOURS = 12;
-const DECK_VERSION = 6;   // bump when song shape changes (forces cache rebuild)
+const DECK_VERSION = 7;   // bump when song shape changes (forces cache rebuild)
 const MAX = 50;           // YouTube mostPopular caps at 50 per region
 const PER_DECADE = 40;    // how many to pull from each Deezer decade playlist
 const COLORS = ["#E8623B", "#F2A43B", "#2BB3A3", "#7A5CB0", "#9B59B6", "#E8623B"];
@@ -138,6 +138,7 @@ async function deezerPreview(song) {
     return {
       preview: hit.preview,
       cover: (hit.album && (hit.album.cover_medium || hit.album.cover)) || "",
+      did: hit.id,
     };
   }
   return null;
@@ -152,7 +153,7 @@ async function attachPreviews(songs) {
     await Promise.all(slice.map(async (song) => {
       try {
         const dz = await deezerPreview(song);
-        if (dz) { song.preview = dz.preview; if (dz.cover) song.cover = dz.cover; }
+        if (dz) { song.preview = dz.preview; if (dz.cover) song.cover = dz.cover; if (dz.did) song.did = dz.did; }
       } catch (e) { /* leave it YouTube-only */ }
     }));
   }

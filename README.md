@@ -10,6 +10,7 @@ Liked songs collect into a playlist you can copy.
 ```
 index.html        the whole app (UI + swipe logic + playback)
 api/top.js         builds the deck: list from YouTube charts, audio from Deezer
+api/preview.js     resolves a fresh (non-expired) Deezer preview URL at play time
 api/login.js       camp passphrase + admin login (issues a signed token)
 api/vote.js        records a vote to Blob
 api/results.js     admin-only aggregated results

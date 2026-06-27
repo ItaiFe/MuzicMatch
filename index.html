@@ -578,6 +578,20 @@ function stopAudio(){
   }
 }
 
+/* Deezer preview URLs are time-signed and expire (the cached deck can be up
+   to 12h old), so resolve a FRESH url from the track id at play time. Falls
+   back to the cached url if we have no id or the lookup fails. */
+async function freshPreview(song){
+  if(song.did){
+    try{
+      const r=await fetch('/api/preview?id='+encodeURIComponent(song.did));
+      const d=await r.json();
+      if(d&&d.ok&&d.preview)return d.preview;
+    }catch(e){/* fall through to cached url */}
+  }
+  return song.preview||null;
+}
+
 function attachAudio(card,song){
   const wrap=card.querySelector('.vinyl-wrap');
   const vinyl=wrap.querySelector('.vinyl');
@@ -610,7 +624,9 @@ function attachAudio(card,song){
     if(song.preview){
       setIcon(wrap,'<span class="ldr"></span>');
       if(hint)hint.textContent='loading preview\u2026';
-      const audio=new Audio(song.preview);audio.volume=1;dzAudio=audio;
+      const url=await freshPreview(song);
+      if(!url){busy=false;resetVinyl(wrap);if(hint)hint.textContent='preview unavailable';return;}
+      const audio=new Audio(url);audio.volume=1;dzAudio=audio;
       const fg=wrap.querySelector('.fg');
       audio.play().then(()=>{
         busy=false;
@@ -683,7 +699,7 @@ function attachYouTube(card,song){
    fails silently and the card just waits for a tap. */
 let autoplayEnabled=true;
 try{const v=localStorage.getItem('mb_autoplay');if(v==='0')autoplayEnabled=false;}catch(e){}
-function autoplayCard(card,song){
+async function autoplayCard(card,song){
   if(!autoplayEnabled||!song||!song.preview)return;
   const wrap=card.querySelector('.vinyl-wrap');
   const vinyl=wrap?wrap.querySelector('.vinyl'):null;
@@ -692,7 +708,10 @@ function autoplayCard(card,song){
   stopAudio();
   activeCard=card;
   if(vinyl){vinyl.classList.add('playing');vinyl.classList.remove('paused');}
-  const audio=new Audio(song.preview);audio.volume=1;dzAudio=audio;
+  const url=await freshPreview(song);
+  // if something else started playing while we resolved, abort
+  if(activeCard!==card||!url){if(!url&&wrap)resetVinyl(wrap);return;}
+  const audio=new Audio(url);audio.volume=1;dzAudio=audio;
   audio.play().then(()=>{
     const play=wrap&&wrap.querySelector('.play');if(play)play.classList.add('hidden');
     if(hint)hint.textContent='preview \u00b7 30 sec';
