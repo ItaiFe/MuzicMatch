@@ -169,30 +169,37 @@ different from the camp passphrase.
 
 ---
 
-## The live song deck (top music)
+## The live song deck (80s–2026)
 
-The deck is no longer a fixed list. On load, the app calls `/api/top`,
-which fetches YouTube's **most-popular music charts** and builds an
-interleaved deck, cached in Blob (`songs/top.json`) so repeat visitors
-don't each cost quota.
+The deck spans four decades plus current hits. On load, the app calls
+`/api/top`, which combines several sources and caches the result in Blob
+(`songs/top.json`) so repeat visitors don't each cost quota:
+
+- **2020s–now:** YouTube's most-popular music chart (global/`TOP_REGION`).
+- **80s, 90s, 2000s, 2010s:** Deezer "100 Greatest Songs of the decade"
+  playlists — these already include a 30-second preview and album art, so
+  they need no YouTube matching. Override any decade with the `DZ_80S`,
+  `DZ_90S`, `DZ_00S`, `DZ_10S` env vars (Deezer playlist IDs).
+- **Israel:** YouTube's Israel chart (`regionCode=IL`).
+
+Each card shows its era as a genre tag (80s / 90s / 2000s / 2010s / Top
+music / Israel chart), so people can see what decade they're hearing.
 
 ### Israeli prioritization
 
-The endpoint fetches two charts — the global/`TOP_REGION` chart and the
-**Israel chart** (`regionCode=IL`) — and interleaves them so **every 3rd
-card is an Israeli-chart song** (positions 3, 6, 9, ...), roughly a third
-of the deck. Israeli cards are tagged with the 🇮🇱 flag. Duplicates that
-appear on both charts are kept once, on the Israeli side.
+All the non-Israeli songs (current hits + every decade) form one pool;
+the Israel chart is interleaved so **every 3rd card is an Israeli song**
+(positions 3, 6, 9, ...). The client reshuffles on every load but keeps
+that cadence, so the mix is different each time while Israeli songs stay
+evenly spaced. Israeli cards are tagged with the 🇮🇱 flag.
 
 Note: YouTube's IL chart is "most popular music in Israel," which is
 mostly Hebrew/Israeli artists but can include international hits popular
 there. It's not a pure Israeli-artist feed — no free chart is — but it
-skews strongly Israeli. The curated fallback list includes hand-picked
-Israeli tracks (Netta, Static & Ben El, Ofra Haza, Omer Adam, ...) so the
-priority holds even offline.
+skews strongly Israeli.
 
 - Cache refreshes at most once every 12 hours. The first load after that
-  does one YouTube call; everyone else reads the cached copy for free.
+  does the fetches; everyone else reads the cached copy for free.
 - Force a refresh anytime by visiting `/api/top?refresh=1`.
 - Change the chart's country with the `TOP_REGION` env var (`IL`, `GB`,
   `US`, ...). Default is `US`.

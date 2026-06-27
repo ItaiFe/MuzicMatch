@@ -18,10 +18,21 @@ async function blob() {
 }
 
 const CACHE_HOURS = 12;
-const DECK_VERSION = 4;   // bump when song shape changes (forces cache rebuild)
+const DECK_VERSION = 5;   // bump when song shape changes (forces cache rebuild)
 const MAX = 50;           // YouTube mostPopular caps at 50 per region
+const PER_DECADE = 40;    // how many to pull from each Deezer decade playlist
 const COLORS = ["#E8623B", "#F2A43B", "#2BB3A3", "#7A5CB0", "#9B59B6", "#E8623B"];
 const CACHE_PATH = "songs/top.json";
+
+// Deezer "100 Greatest Songs of the decade" playlists (Topsify series).
+// These come with preview + album art built in — no YouTube matching needed.
+// Override any of them via env var if you want different curation.
+const DECADES = [
+  { tag: "80s",  g: "80s",  playlist: process.env.DZ_80S  || "1321696237"  },
+  { tag: "90s",  g: "90s",  playlist: process.env.DZ_90S  || "11798812881" },
+  { tag: "00s",  g: "2000s", playlist: process.env.DZ_00S || "11153531204" },
+  { tag: "10s",  g: "2010s", playlist: process.env.DZ_10S || "11153461484" },
+];
 
 function blobConfigured() {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
@@ -147,6 +158,43 @@ async function attachPreviews(songs) {
   return songs;
 }
 
+/* ---------- Deezer playlists: decade songs (preview built in) ---------- */
+async function deezerPlaylist(playlistId, genreLabel) {
+  const url =
+    "https://api.deezer.com/playlist/" + playlistId + "/tracks?limit=" + PER_DECADE;
+  const data = await fetchJson(url);
+  const rows = (data && data.data) || [];
+  const out = [];
+  for (const t of rows) {
+    if (!t || !t.title || !t.preview) continue;   // need a playable preview
+    out.push({
+      s: (t.title_short || t.title).slice(0, 80),
+      a: (t.artist && t.artist.name ? t.artist.name : "").slice(0, 60),
+      c: "",
+      f: "🎵",
+      g: genreLabel,
+      col: COLORS[out.length % COLORS.length],
+      preview: t.preview,
+      cover: (t.album && (t.album.cover_medium || t.album.cover)) || "",
+      did: t.id,
+      il: 0,
+    });
+  }
+  return out;
+}
+
+async function allDecadeSongs() {
+  const lists = await Promise.all(
+    DECADES.map((d) =>
+      deezerPlaylist(d.playlist, d.g).catch((e) => {
+        console.error("decade " + d.tag + " failed", e);
+        return [];
+      })
+    )
+  );
+  return lists.flat();
+}
+
 /* ---------- interleave (every 3rd Israeli) ---------- */
 function dedupe(list) {
   const seen = new Set(); const out = [];
@@ -171,15 +219,30 @@ function interleave(global, israeli) {
 
 async function buildDeck(key) {
   const globalRegion = process.env.TOP_REGION || "US";
-  const globalSongs = await ytChart(key, globalRegion, false);
+
+  // current 2020s-now hits (YouTube) + Israeli chart (YouTube)
+  const currentSongs = await ytChart(key, globalRegion, false);
   let israeliSongs = [];
   try { israeliSongs = await ytChart(key, "IL", true); }
   catch (e) { console.error("IL chart failed, global only", e); }
+
+  // older hits, 80s-2010s, straight from Deezer (previews already included)
+  const decadeSongs = await allDecadeSongs();
+
+  // YouTube songs need Deezer previews resolved; decade songs already have them
+  await attachPreviews(currentSongs);
+
+  // non-Israeli pool = current hits + all decades, deduped
+  const nonIsraeli = dedupe([...currentSongs, ...decadeSongs]);
+
+  // drop any that duplicate an Israeli-chart track (keep the Israeli version)
   const ilKeys = new Set(israeliSongs.map((s) => (s.s + "|" + s.a).toLowerCase()));
-  const globalOnly = globalSongs.filter((s) => !ilKeys.has((s.s + "|" + s.a).toLowerCase()));
-  const deck = interleave(globalOnly, israeliSongs);
-  await attachPreviews(deck);   // add Deezer previews where possible
-  return deck;
+  const globalOnly = nonIsraeli.filter(
+    (s) => !ilKeys.has((s.s + "|" + s.a).toLowerCase())
+  );
+
+  // interleave Israeli every 3rd; the client re-shuffles each load anyway
+  return interleave(globalOnly, israeliSongs);
 }
 
 /* ---------- handler ---------- */

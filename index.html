@@ -50,7 +50,8 @@
   .card.top{touch-action:none}
   .card .art{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
   .card .art canvas{position:absolute;inset:0;width:100%;height:100%}
-  .vinyl{position:relative;width:46%;aspect-ratio:1;border-radius:50%;
+  .vinyl-wrap{position:relative;width:46%;aspect-ratio:1;display:flex;align-items:center;justify-content:center}
+  .vinyl{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;
          background:radial-gradient(circle at 50% 50%, #1a1a1a 0 32%, #2a2a2a 33% 34%, #1a1a1a 35% 60%, #2a2a2a 61% 62%, #1a1a1a 63%);
          box-shadow:0 14px 30px -8px #00000088;animation:spin 6s linear infinite}
   .vinyl .label{position:absolute;inset:34%;border-radius:50%;display:flex;align-items:center;justify-content:center;
@@ -122,8 +123,8 @@
   .vinyl{cursor:pointer}
   .vinyl.playing{animation-play-state:running}
   .vinyl.paused{animation-play-state:paused}
-  .ring{position:absolute;inset:-7px;border-radius:50%;pointer-events:none}
-  .ring circle{fill:none;stroke-width:5;stroke-linecap:round}
+  .ring{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;pointer-events:none;overflow:visible}
+  .ring circle{fill:none;stroke-width:4;stroke-linecap:round}
   .ring .bg{stroke:#ffffff33}
   .ring .fg{stroke:#7CF2D8;transition:stroke-dashoffset .15s linear}
   .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -141,7 +142,7 @@
   .ytmount{position:absolute;inset:0;z-index:4;display:none;background:#000}
   .ytmount.on{display:block}
   .ytmount iframe{width:100%;height:100%;border:0}
-  .art.playing .vinyl,.art.playing .flag,.art.playing .rank,.art.playing canvas{visibility:hidden}
+  .art.playing .vinyl-wrap,.art.playing .flag,.art.playing .rank,.art.playing canvas{visibility:hidden}
 
   .login{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;
          padding:30px;padding-top:max(30px,env(safe-area-inset-top));padding-bottom:max(30px,env(safe-area-inset-bottom));
@@ -491,8 +492,9 @@ function makeCard(song,rank){
       <canvas></canvas>
       <div class="flag">${song.f}</div>
       <div class="rank">#${rank} in deck</div>
-      <div class="vinyl"><div class="label" style="background:${song.col}${song.cover?`;background-image:url('${song.cover}');background-size:cover;background-position:center`:''}">${song.cover?'':song.s[0]}</div>
-        <svg class="ring" viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="46"></circle><circle class="fg" cx="50" cy="50" r="46" stroke-dasharray="289" stroke-dashoffset="289" transform="rotate(-90 50 50)"></circle></svg>
+      <div class="vinyl-wrap">
+        <div class="vinyl"><div class="label" style="background:${song.col}${song.cover?`;background-image:url('${song.cover}');background-size:cover;background-position:center`:''}">${song.cover?'':song.s[0]}</div></div>
+        <svg class="ring" viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="45"></circle><circle class="fg" cx="50" cy="50" r="45" stroke-dasharray="282.7" stroke-dashoffset="282.7" transform="rotate(-90 50 50)"></circle></svg>
         <div class="play"><span class="ic">▶</span></div>
       </div>
       <div class="ytmount"></div>
@@ -525,13 +527,13 @@ let ytApiReady=false;
 window.onYouTubeIframeAPIReady=function(){ytApiReady=true;};
 (function(){var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);})();
 
-function resetVinyl(v){
-  if(!v)return;
-  v.classList.remove('playing');v.classList.add('paused');
-  const play=v.querySelector('.play');if(play){play.classList.remove('hidden');const ic=play.querySelector('.ic');if(ic)ic.textContent='\u25B6';}
-  const fg=v.querySelector('.fg');if(fg)fg.style.strokeDashoffset=289;
+function resetVinyl(w){
+  if(!w)return;
+  const vinyl=w.querySelector('.vinyl');if(vinyl){vinyl.classList.remove('playing');vinyl.classList.add('paused');}
+  const play=w.querySelector('.play');if(play){play.classList.remove('hidden');const ic=play.querySelector('.ic');if(ic)ic.textContent='\u25B6';}
+  const fg=w.querySelector('.fg');if(fg)fg.style.strokeDashoffset=282.7;
 }
-function setIcon(v,sym){const ic=v.querySelector('.play .ic');if(ic)ic.innerHTML=sym;}
+function setIcon(w,sym){const ic=w.querySelector('.play .ic');if(ic)ic.innerHTML=sym;}
 
 function stopAudio(){
   if(dzAudio){try{dzAudio.pause();}catch(e){}dzAudio=null;}
@@ -540,31 +542,32 @@ function stopAudio(){
   if(activeCard){
     const art=activeCard.querySelector('.art');if(art)art.classList.remove('playing');
     const m=activeCard.querySelector('.ytmount');if(m){m.classList.remove('on');m.innerHTML='';}
-    resetVinyl(activeCard.querySelector('.vinyl'));
+    resetVinyl(activeCard.querySelector('.vinyl-wrap'));
     const h=activeCard.querySelector('.audio-hint');if(h)h.textContent='tap the record to play';
     activeCard=null;
   }
 }
 
 function attachAudio(card,song){
-  const vinyl=card.querySelector('.vinyl');
+  const wrap=card.querySelector('.vinyl-wrap');
+  const vinyl=wrap.querySelector('.vinyl');
   const hint=card.querySelector('.audio-hint');
   const art=card.querySelector('.art');
   let busy=false;
-  vinyl.addEventListener('click',async(e)=>{
+  wrap.addEventListener('click',async(e)=>{
     e.stopPropagation();
     if(busy)return;
     // toggle pause/resume if this card is already active
     if(activeCard===card){
       if(dzAudio){
-        if(dzAudio.paused){dzAudio.play();vinyl.querySelector('.play').classList.add('hidden');if(hint)hint.textContent='now playing';}
-        else{dzAudio.pause();setIcon(vinyl,'\u275A\u275A');vinyl.querySelector('.play').classList.remove('hidden');if(hint)hint.textContent='paused';}
+        if(dzAudio.paused){dzAudio.play();wrap.querySelector('.play').classList.add('hidden');if(hint)hint.textContent='now playing';}
+        else{dzAudio.pause();setIcon(wrap,'\u275A\u275A');wrap.querySelector('.play').classList.remove('hidden');if(hint)hint.textContent='paused';}
         return;
       }
       if(ytPlayer){
         const st=ytPlayer.getPlayerState();
-        if(st===1){ytPlayer.pauseVideo();setIcon(vinyl,'\u275A\u275A');vinyl.querySelector('.play').classList.remove('hidden');if(hint)hint.textContent='paused';}
-        else{ytPlayer.playVideo();vinyl.querySelector('.play').classList.add('hidden');if(hint)hint.textContent='now playing';}
+        if(st===1){ytPlayer.pauseVideo();setIcon(wrap,'\u275A\u275A');wrap.querySelector('.play').classList.remove('hidden');if(hint)hint.textContent='paused';}
+        else{ytPlayer.playVideo();wrap.querySelector('.play').classList.add('hidden');if(hint)hint.textContent='now playing';}
         return;
       }
     }
@@ -575,32 +578,32 @@ function attachAudio(card,song){
 
     /* Preferred path: Deezer 30-second preview via <audio>. */
     if(song.preview){
-      setIcon(vinyl,'<span class="ldr"></span>');
+      setIcon(wrap,'<span class="ldr"></span>');
       if(hint)hint.textContent='loading preview\u2026';
       const audio=new Audio(song.preview);audio.volume=1;dzAudio=audio;
-      const fg=vinyl.querySelector('.fg');
+      const fg=wrap.querySelector('.fg');
       audio.play().then(()=>{
         busy=false;
-        vinyl.querySelector('.play').classList.add('hidden');
+        wrap.querySelector('.play').classList.add('hidden');
         if(hint)hint.textContent='preview \u00b7 30 sec';
-      }).catch(()=>{busy=false;setIcon(vinyl,'\u25B6');toast('Tap again to play');});
+      }).catch(()=>{busy=false;setIcon(wrap,'\u25B6');toast('Tap again to play');});
       const tick=()=>{
         if(dzAudio!==audio)return;
         const p=audio.duration?audio.currentTime/audio.duration:0;
-        if(fg)fg.style.strokeDashoffset=289*(1-p);
+        if(fg)fg.style.strokeDashoffset=282.7*(1-p);
         rafId=requestAnimationFrame(tick);
       };
       tick();
-      audio.onended=()=>{resetVinyl(vinyl);if(hint)hint.textContent='tap to replay';};
+      audio.onended=()=>{resetVinyl(wrap);if(hint)hint.textContent='tap to replay';};
       return;
     }
 
     /* Fallback: full song via YouTube embed. */
     if(song.vid){
-      setIcon(vinyl,'<span class="ldr"></span>');
+      setIcon(wrap,'<span class="ldr"></span>');
       if(hint)hint.textContent='loading full song\u2026';
       if(!ytApiReady){let tries=0;while(!ytApiReady&&tries<40){await new Promise(r=>setTimeout(r,100));tries++;}}
-      if(!ytApiReady){busy=false;resetVinyl(vinyl);if(hint)hint.textContent='player unavailable';return;}
+      if(!ytApiReady){busy=false;resetVinyl(wrap);if(hint)hint.textContent='player unavailable';return;}
       const mount=card.querySelector('.ytmount');
       mount.classList.add('on');mount.innerHTML='<div></div>';
       art.classList.add('playing');
@@ -651,29 +654,30 @@ let autoplayEnabled=true;
 try{const v=localStorage.getItem('mb_autoplay');if(v==='0')autoplayEnabled=false;}catch(e){}
 function autoplayCard(card,song){
   if(!autoplayEnabled||!song||!song.preview)return;
-  const vinyl=card.querySelector('.vinyl');
+  const wrap=card.querySelector('.vinyl-wrap');
+  const vinyl=wrap?wrap.querySelector('.vinyl'):null;
   const hint=card.querySelector('.audio-hint');
-  const fg=vinyl?vinyl.querySelector('.fg'):null;
+  const fg=wrap?wrap.querySelector('.fg'):null;
   stopAudio();
   activeCard=card;
   if(vinyl){vinyl.classList.add('playing');vinyl.classList.remove('paused');}
   const audio=new Audio(song.preview);audio.volume=1;dzAudio=audio;
   audio.play().then(()=>{
-    const play=vinyl&&vinyl.querySelector('.play');if(play)play.classList.add('hidden');
+    const play=wrap&&wrap.querySelector('.play');if(play)play.classList.add('hidden');
     if(hint)hint.textContent='preview \u00b7 30 sec';
   }).catch(()=>{
     // autoplay blocked — reset quietly, user can tap to start
-    if(vinyl)resetVinyl(vinyl);
+    if(wrap)resetVinyl(wrap);
     if(activeCard===card){dzAudio=null;activeCard=null;}
   });
   const tick=()=>{
     if(dzAudio!==audio)return;
     const p=audio.duration?audio.currentTime/audio.duration:0;
-    if(fg)fg.style.strokeDashoffset=289*(1-p);
+    if(fg)fg.style.strokeDashoffset=282.7*(1-p);
     rafId=requestAnimationFrame(tick);
   };
   tick();
-  audio.onended=()=>{if(vinyl)resetVinyl(vinyl);if(hint)hint.textContent='tap to replay';};
+  audio.onended=()=>{if(wrap)resetVinyl(wrap);if(hint)hint.textContent='tap to replay';};
 }
 
 /* ---------- Drag / swipe ---------- */
