@@ -1,20 +1,32 @@
 # Midburn Sounds — Swipe the Playlist
 
 A Tinder-style song-swiping app. Swipe right to add a song to the camp
-playlist, left to skip. Tap the record to play the full song (embedded
-from YouTube). Liked songs collect into a playlist you can copy.
+playlist, left to skip. Tap the record to hear the song — a 30-second
+Deezer preview when available, or the full song via YouTube when not.
+Liked songs collect into a playlist you can copy.
 
 ## What's in here
 
 ```
 index.html        the whole app (UI + swipe logic + playback)
-api/search.js      serverless function that searches YouTube server-side
+api/top.js         builds the deck: list from YouTube charts, audio from Deezer
+api/login.js       camp passphrase + admin login (issues a signed token)
+api/vote.js        records a vote to Blob
+api/results.js     admin-only aggregated results
+api/_store.js      Blob vote storage (per-person files)
+api/_auth.js       token signing/verification helper
 vercel.json        Vercel config
 ```
 
+How playback works: `/api/top` builds the song list from YouTube's
+regional music charts (good Israel data), then resolves a **Deezer
+30-second preview** for each song server-side and caches the whole deck
+in Blob. In the app, tapping a record plays the Deezer preview via a
+plain `<audio>` element; if Deezer had no match for that song, it falls
+back to the **full song via a YouTube embed**. Every card stays playable.
+
 The YouTube API key lives **only** on the server (as an environment
-variable), never in the browser. The app calls `/api/search`, which does
-the lookup and returns just the video ID.
+variable), never in the browser.
 
 ---
 
@@ -178,10 +190,10 @@ priority holds even offline.
 - Force a refresh anytime by visiting `/api/top?refresh=1`.
 - Change the chart's country with the `TOP_REGION` env var (`IL`, `GB`,
   `US`, ...). Default is `US`.
-- Each fetched song already includes its YouTube video id, so playback
-  skips the search step entirely for chart songs — extra quota savings.
-- If the live fetch fails (no key, offline, quota), the app falls back to
-  a curated list of 40 songs baked into the page, so it always works.
+- Each song gets a Deezer 30-second preview resolved at build time and
+  cached, so playback is instant. Songs Deezer can't match keep their
+  YouTube video id and play the full song via embed instead.
+- Deezer needs no key. The only key is `YT_API_KEY` for the chart list.
 
 Because it's "most-popular music videos," the deck skews to whatever's
 trending right now and can include non-pop or non-English megahits. For a

@@ -1,17 +1,17 @@
-// Live "top music" deck. Fetches YouTube's most-popular music videos for a
-// region, maps them into the app's song shape, and CACHES the result in Blob
-// so repeat visitors don't each cost YouTube quota.
+// Builds the swipe deck: song LIST from YouTube charts (good regional/Israel
+// data), AUDIO from Deezer previews resolved at build time. Songs Deezer
+// can't match keep their YouTube video id and play the full song via embed.
 //
 // GET /api/top            -> { ok, songs, source, fetchedAt }
-// GET /api/top?refresh=1  -> force a fresh fetch (ignores cache age)
+// GET /api/top?refresh=1  -> force a fresh fetch
 //
-// Cache: songs/top.json in Blob, refreshed at most once per CACHE_HOURS.
+// Cached in Blob (songs/top.json) so the YouTube quota + Deezer lookups
+// happen at most once per CACHE_HOURS, not per visitor.
 
 import { put, list } from "@vercel/blob";
 
 const CACHE_HOURS = 12;
-const MAX = 40;
-
+const MAX = 30;
 const COLORS = ["#E8623B", "#F2A43B", "#2BB3A3", "#7A5CB0", "#9B59B6", "#E8623B"];
 const CACHE_PATH = "songs/top.json";
 
@@ -19,191 +19,181 @@ function blobConfigured() {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 }
 
-async function fetchJson(url) {
-  const r = await fetch(url + (url.includes("?") ? "&" : "?") + "t=" + Date.now(), {
-    cache: "no-store",
-  });
+async function fetchJson(url, bust) {
+  const u = bust ? url + (url.includes("?") ? "&" : "?") + "t=" + Date.now() : url;
+  const r = await fetch(u, { cache: "no-store" });
   if (!r.ok) return null;
   try { return await r.json(); } catch { return null; }
 }
 
-// Pull the cached deck if it's fresh enough.
+/* ---------- Blob cache ---------- */
 async function readCache() {
   if (!blobConfigured()) return null;
   try {
     const { blobs } = await list({ prefix: CACHE_PATH, limit: 1 });
     if (!blobs || !blobs.length || blobs[0].pathname !== CACHE_PATH) return null;
-    const data = await fetchJson(blobs[0].url);
+    const data = await fetchJson(blobs[0].url, true);
     if (!data || !data.fetchedAt || !Array.isArray(data.songs)) return null;
     const ageHrs = (Date.now() - data.fetchedAt) / 3600000;
     if (ageHrs > CACHE_HOURS) return { ...data, stale: true };
     return data;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
-
 async function writeCache(payload) {
   if (!blobConfigured()) return;
   try {
     await put(CACHE_PATH, JSON.stringify(payload), {
-      access: "public",
-      contentType: "application/json",
-      allowOverwrite: true,
-      addRandomSuffix: false,
-      cacheControlMaxAge: 0,
+      access: "public", contentType: "application/json",
+      allowOverwrite: true, addRandomSuffix: false, cacheControlMaxAge: 0,
     });
-  } catch (e) {
-    console.error("top cache write failed", e);
-  }
+  } catch (e) { console.error("top cache write failed", e); }
 }
 
-// "Artist - Title (Official Video)" -> { artist, title }
+/* ---------- YouTube: the song list ---------- */
 function parseTitle(rawTitle, channel) {
   let t = rawTitle
-    .replace(/\(.*?\)|\[.*?\]/g, " ")               // drop (Official Video) etc.
+    .replace(/\(.*?\)|\[.*?\]/g, " ")
     .replace(/official\s*(music)?\s*video|lyric video|audio|visualizer|m\/v/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/\s+/g, " ").trim();
   let artist = channel.replace(/VEVO/i, "").replace(/\s*-\s*Topic$/i, "").trim();
   let title = t;
   const dash = t.split(/\s+[-–—]\s+/);
-  if (dash.length >= 2) {
-    artist = dash[0].trim();
-    title = dash.slice(1).join(" - ").trim();
-  }
+  if (dash.length >= 2) { artist = dash[0].trim(); title = dash.slice(1).join(" - ").trim(); }
   return { artist: artist.slice(0, 60), title: title.slice(0, 80) };
 }
 
-async function fetchChart(key, region, isIsraeli) {
+async function ytChart(key, region, isIsraeli) {
   const url =
     "https://www.googleapis.com/youtube/v3/videos" +
     "?part=snippet&chart=mostPopular&videoCategoryId=10" +
-    "&maxResults=" + MAX +
-    "&regionCode=" + encodeURIComponent(region) +
+    "&maxResults=" + MAX + "&regionCode=" + encodeURIComponent(region) +
     "&key=" + key;
   const r = await fetch(url);
-  if (!r.ok) {
-    const body = await r.text();
-    throw new Error("youtube " + r.status + " " + body.slice(0, 200));
-  }
+  if (!r.ok) { const b = await r.text(); throw new Error("youtube " + r.status + " " + b.slice(0, 160)); }
   const data = await r.json();
-  const songs = [];
+  const out = [];
   for (const item of data.items || []) {
     const sn = item.snippet || {};
     if (!sn.title || !sn.channelTitle) continue;
     const { artist, title } = parseTitle(sn.title, sn.channelTitle);
     if (!title) continue;
-    songs.push({
-      s: title,
-      a: artist,
+    out.push({
+      s: title, a: artist,
       c: isIsraeli ? "Israel" : "",
       f: isIsraeli ? "🇮🇱" : "🎵",
       g: isIsraeli ? "Israel chart" : "Top music",
-      col: COLORS[songs.length % COLORS.length],
-      vid: item.id,
+      col: COLORS[out.length % COLORS.length],
+      vid: item.id,          // YouTube fallback
       il: isIsraeli ? 1 : 0,
     });
-  }
-  return songs;
-}
-
-// De-dup by video id (a song can chart in both IL and global).
-function dedupe(list) {
-  const seen = new Set();
-  const out = [];
-  for (const s of list) {
-    if (s.vid && seen.has(s.vid)) continue;
-    if (s.vid) seen.add(s.vid);
-    out.push(s);
   }
   return out;
 }
 
-// Interleave so every 3rd card (positions 3,6,9...) is Israeli, the rest
-// global. Falls back gracefully if one list runs short.
+/* ---------- Deezer: resolve a preview for one song ---------- */
+async function deezerPreview(song) {
+  // strict-ish search: track + artist
+  const q = encodeURIComponent(`track:"${song.s}" artist:"${song.a}"`);
+  let data = await fetchJson("https://api.deezer.com/search?q=" + q + "&limit=1");
+  let hit = data && data.data && data.data[0];
+  if (!hit || !hit.preview) {
+    // looser fallback: plain text search
+    const q2 = encodeURIComponent(`${song.s} ${song.a}`);
+    data = await fetchJson("https://api.deezer.com/search?q=" + q2 + "&limit=1");
+    hit = data && data.data && data.data[0];
+  }
+  if (hit && hit.preview) {
+    return {
+      preview: hit.preview,
+      cover: (hit.album && (hit.album.cover_medium || hit.album.cover)) || "",
+    };
+  }
+  return null;
+}
+
+// Resolve Deezer previews for a list, in small concurrent batches (Deezer
+// allows ~50 req / 5s, so we keep batches modest).
+async function attachPreviews(songs) {
+  const BATCH = 5;
+  for (let i = 0; i < songs.length; i += BATCH) {
+    const slice = songs.slice(i, i + BATCH);
+    await Promise.all(slice.map(async (song) => {
+      try {
+        const dz = await deezerPreview(song);
+        if (dz) { song.preview = dz.preview; if (dz.cover) song.cover = dz.cover; }
+      } catch (e) { /* leave it YouTube-only */ }
+    }));
+  }
+  return songs;
+}
+
+/* ---------- interleave (every 3rd Israeli) ---------- */
+function dedupe(list) {
+  const seen = new Set(); const out = [];
+  for (const s of list) {
+    const k = (s.s + "|" + s.a).toLowerCase();
+    if (seen.has(k)) continue; seen.add(k); out.push(s);
+  }
+  return out;
+}
 function interleave(global, israeli) {
-  const out = [];
-  let gi = 0, ii = 0;
-  let pos = 0;
+  const out = []; let gi = 0, ii = 0, pos = 0;
   const total = global.length + israeli.length;
   while (out.length < total) {
     pos++;
-    const wantIsraeli = pos % 3 === 0;
-    if (wantIsraeli && ii < israeli.length) {
-      out.push(israeli[ii++]);
-    } else if (gi < global.length) {
-      out.push(global[gi++]);
-    } else if (ii < israeli.length) {
-      out.push(israeli[ii++]);
-    } else {
-      break;
-    }
+    if (pos % 3 === 0 && ii < israeli.length) out.push(israeli[ii++]);
+    else if (gi < global.length) out.push(global[gi++]);
+    else if (ii < israeli.length) out.push(israeli[ii++]);
+    else break;
   }
   return dedupe(out);
 }
 
-async function fetchTop(key) {
+async function buildDeck(key) {
   const globalRegion = process.env.TOP_REGION || "US";
-  // fetch both charts; if the IL one fails, we still return global
-  const globalSongs = await fetchChart(key, globalRegion, false);
+  const globalSongs = await ytChart(key, globalRegion, false);
   let israeliSongs = [];
-  try {
-    israeliSongs = await fetchChart(key, "IL", true);
-  } catch (e) {
-    console.error("IL chart fetch failed, using global only", e);
-  }
-  // remove any IL song whose video also appears in global (keep IL-tagged)
-  const ilVids = new Set(israeliSongs.map((s) => s.vid));
-  const globalOnly = globalSongs.filter((s) => !ilVids.has(s.vid));
-  return interleave(globalOnly, israeliSongs);
+  try { israeliSongs = await ytChart(key, "IL", true); }
+  catch (e) { console.error("IL chart failed, global only", e); }
+  const ilKeys = new Set(israeliSongs.map((s) => (s.s + "|" + s.a).toLowerCase()));
+  const globalOnly = globalSongs.filter((s) => !ilKeys.has((s.s + "|" + s.a).toLowerCase()));
+  const deck = interleave(globalOnly, israeliSongs);
+  await attachPreviews(deck);   // add Deezer previews where possible
+  return deck;
 }
 
+/* ---------- handler ---------- */
 export default async function handler(req, res) {
   const force = req.query.refresh === "1";
 
-  // 1) serve fresh cache when possible
   if (!force) {
     const cached = await readCache();
     if (cached && !cached.stale) {
       res.setHeader("Cache-Control", "s-maxage=600");
-      res.status(200).json({
-        ok: true,
-        songs: cached.songs,
-        source: "cache",
-        fetchedAt: cached.fetchedAt,
-      });
+      res.status(200).json({ ok: true, songs: cached.songs, source: "cache", fetchedAt: cached.fetchedAt });
       return;
     }
   }
 
-  // 2) need a fresh fetch
   const key = process.env.YT_API_KEY;
   if (!key) {
-    // no key — fall back to whatever cache we have, even stale
     const cached = await readCache();
-    if (cached) {
-      res.status(200).json({ ok: true, songs: cached.songs, source: "stale-cache", fetchedAt: cached.fetchedAt });
-      return;
-    }
+    if (cached) { res.status(200).json({ ok: true, songs: cached.songs, source: "stale-cache", fetchedAt: cached.fetchedAt }); return; }
     res.status(500).json({ ok: false, error: "no YT_API_KEY and no cache" });
     return;
   }
 
   try {
-    const songs = await fetchTop(key);
-    if (!songs.length) throw new Error("empty chart");
-    const payload = { songs, fetchedAt: Date.now(), region: process.env.TOP_REGION || "US" };
+    const songs = await buildDeck(key);
+    if (!songs.length) throw new Error("empty deck");
+    const payload = { songs, fetchedAt: Date.now() };
     await writeCache(payload);
-    res.status(200).json({ ok: true, songs, source: "youtube", fetchedAt: payload.fetchedAt });
+    const withPreview = songs.filter((s) => s.preview).length;
+    res.status(200).json({ ok: true, songs, source: "youtube+deezer", fetchedAt: payload.fetchedAt, previews: withPreview });
   } catch (e) {
-    console.error("top fetch error", e);
-    // fall back to stale cache if the live fetch fails
+    console.error("top build error", e);
     const cached = await readCache();
-    if (cached) {
-      res.status(200).json({ ok: true, songs: cached.songs, source: "stale-cache", fetchedAt: cached.fetchedAt });
-      return;
-    }
+    if (cached) { res.status(200).json({ ok: true, songs: cached.songs, source: "stale-cache", fetchedAt: cached.fetchedAt }); return; }
     res.status(502).json({ ok: false, error: "fetch failed: " + e.message });
   }
 }
