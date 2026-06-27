@@ -18,7 +18,7 @@ async function blob() {
 }
 
 const CACHE_HOURS = 12;
-const DECK_VERSION = 5;   // bump when song shape changes (forces cache rebuild)
+const DECK_VERSION = 6;   // bump when song shape changes (forces cache rebuild)
 const MAX = 50;           // YouTube mostPopular caps at 50 per region
 const PER_DECADE = 40;    // how many to pull from each Deezer decade playlist
 const COLORS = ["#E8623B", "#F2A43B", "#2BB3A3", "#7A5CB0", "#9B59B6", "#E8623B"];
@@ -94,6 +94,7 @@ function parseTitle(rawTitle, channel) {
 }
 
 async function ytChart(key, region, isIsraeli) {
+  if (!key) return [];   // no YouTube key — skip, deck builds from Deezer
   const url =
     "https://www.googleapis.com/youtube/v3/videos" +
     "?part=snippet&chart=mostPopular&videoCategoryId=10" +
@@ -220,17 +221,21 @@ function interleave(global, israeli) {
 async function buildDeck(key) {
   const globalRegion = process.env.TOP_REGION || "US";
 
-  // current 2020s-now hits (YouTube) + Israeli chart (YouTube)
-  const currentSongs = await ytChart(key, globalRegion, false);
+  // current 2020s-now hits (YouTube) + Israeli chart (YouTube).
+  // YouTube can fail (bad/restricted key, quota) — that must NOT kill the
+  // whole deck, since the decade songs below come from Deezer and need no key.
+  let currentSongs = [];
+  try { currentSongs = await ytChart(key, globalRegion, false); }
+  catch (e) { console.error("global chart failed, continuing without it:", e.message); }
   let israeliSongs = [];
   try { israeliSongs = await ytChart(key, "IL", true); }
-  catch (e) { console.error("IL chart failed, global only", e); }
+  catch (e) { console.error("IL chart failed, continuing without it:", e.message); }
 
   // older hits, 80s-2010s, straight from Deezer (previews already included)
   const decadeSongs = await allDecadeSongs();
 
   // YouTube songs need Deezer previews resolved; decade songs already have them
-  await attachPreviews(currentSongs);
+  if (currentSongs.length) await attachPreviews(currentSongs);
 
   // non-Israeli pool = current hits + all decades, deduped
   const nonIsraeli = dedupe([...currentSongs, ...decadeSongs]);
@@ -258,13 +263,9 @@ export default async function handler(req, res) {
     }
   }
 
-  const key = process.env.YT_API_KEY;
-  if (!key) {
-    const cached = await readCache();
-    if (cached) { res.status(200).json({ ok: true, songs: cached.songs, source: "stale-cache", fetchedAt: cached.fetchedAt }); return; }
-    res.status(500).json({ ok: false, error: "no YT_API_KEY and no cache" });
-    return;
-  }
+  // YouTube key is optional now: without it (or if YouTube rejects us), the
+  // deck still builds from Deezer decade playlists. ytChart handles "" safely.
+  const key = process.env.YT_API_KEY || "";
 
   try {
     const songs = await buildDeck(key);
@@ -272,7 +273,8 @@ export default async function handler(req, res) {
     const payload = { songs, fetchedAt: Date.now(), v: DECK_VERSION };
     await writeCache(payload);
     const withPreview = songs.filter((s) => s.preview).length;
-    res.status(200).json({ ok: true, songs, source: "youtube+deezer", fetchedAt: payload.fetchedAt, previews: withPreview });
+    const src = key ? "youtube+deezer" : "deezer";
+    res.status(200).json({ ok: true, songs, source: src, fetchedAt: payload.fetchedAt, previews: withPreview });
   } catch (e) {
     console.error("top build error", e);
     const cached = await readCache();

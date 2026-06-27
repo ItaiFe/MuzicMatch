@@ -649,10 +649,11 @@ function attachAudio(card,song){
       return;
     }
 
-    /* Nothing playable. */
-    busy=false;resetVinyl(vinyl);
-    if(hint)hint.textContent='no preview \u2014 swipe on';
-    toast('No preview for this track');
+    /* No preview and no video id (e.g. offline fallback list): open a
+       YouTube search so tapping always does something. */
+    busy=false;resetVinyl(wrap);
+    if(hint)hint.textContent='opening YouTube\u2026';
+    window.open(ytLink(song),'_blank','noopener');
   });
 }
 
