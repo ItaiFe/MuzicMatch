@@ -153,11 +153,9 @@
   .exp-wrap{max-width:440px;margin:18px auto 8px;padding:11px 16px 13px;width:100%;box-sizing:border-box;
         background:rgba(20,14,28,.55);backdrop-filter:blur(8px);border:1px solid #ffffff22;border-radius:16px;
         box-shadow:0 6px 20px -8px rgba(0,0,0,.5)}
-  .exp-title{display:flex;align-items:center;justify-content:center;gap:6px;color:#fff;font-size:12.5px;
-        font-weight:900;letter-spacing:.03em;margin-bottom:9px;text-transform:uppercase;text-shadow:0 1px 3px #0008}
-  .exp-title .exp-val{color:#FFD27A;font-weight:900}
   .exp-labels{display:flex;justify-content:space-between;align-items:center;color:#fff;
         font-size:11.5px;font-weight:800;margin-bottom:7px;text-shadow:0 1px 3px #000a}
+  .exp-labels .exp-val{color:#FFD27A;font-weight:900;font-size:11px;letter-spacing:.02em;text-transform:uppercase}
   .exp-slider{-webkit-appearance:none;appearance:none;width:100%;height:10px;border-radius:999px;outline:none;
         background:linear-gradient(to right,#2BB3A3 0%,#F2A43B 45%,#E84393 78%,#9B59B6 100%);cursor:pointer;
         box-shadow:0 0 0 1px #ffffff33 inset, 0 2px 6px #0006}
@@ -337,9 +335,9 @@
     <div class="sub">Right if it bangs, left if it doesn't</div>
     <div class="whoami" id="whoami"></div>
     <div class="counters">
-      <div class="pill">Seen <b id="cSeen">0</b></div>
-      <div class="pill liked">Liked <b id="cLiked">0</b></div>
-      <div class="pill">Left <b id="cLeft">0</b></div>
+      <div class="pill" title="Seen">👀 <b id="cSeen">0</b></div>
+      <div class="pill liked" title="Liked">💚 <b id="cLiked">0</b></div>
+      <div class="pill" title="Skipped">👎 <b id="cLeft">0</b></div>
     </div>
   </header>
 
@@ -380,8 +378,7 @@
   </div>
 
   <div class="exp-wrap" id="expWrap">
-    <div class="exp-title">🎛️ Experimentalis · <span class="exp-val" id="expVal">balanced</span></div>
-    <div class="exp-labels"><span>📈 top charts</span><span>🌍 exotic</span></div>
+    <div class="exp-labels"><span>📈 top charts</span><span class="exp-val" id="expVal">balanced</span><span>🌍 exotic</span></div>
     <input type="range" id="expSlider" class="exp-slider" min="0" max="100" value="25">
   </div>
 
