@@ -31,6 +31,7 @@ You need a free Vercel account: https://vercel.com/signup
 | `CAMP_SECRET`    | any long random string (signs login tokens) | yes |
 | `ADMIN_PASSWORD` | password that unlocks the results panel | recommended |
 | `ALLOWED_ORIGIN` | your live URL, e.g. `https://midburn-sounds.vercel.app` | recommended |
+| `TOP_REGION`     | ISO country code for the top-music chart (default `US`) | optional |
 
 Plus the storage variable, which Vercel adds automatically when you
 connect a Blob store (see "Central vote storage" below):
@@ -147,6 +148,46 @@ The full camp breakdown is gated so regular voters can't see it:
 If you don't set `ADMIN_PASSWORD`, nobody can open the admin panel (the
 button stays hidden and the endpoint stays locked). Set it to something
 different from the camp passphrase.
+
+---
+
+## The live song deck (top music)
+
+The deck is no longer a fixed list. On load, the app calls `/api/top`,
+which fetches YouTube's **most-popular music charts** and builds an
+interleaved deck, cached in Blob (`songs/top.json`) so repeat visitors
+don't each cost quota.
+
+### Israeli prioritization
+
+The endpoint fetches two charts — the global/`TOP_REGION` chart and the
+**Israel chart** (`regionCode=IL`) — and interleaves them so **every 3rd
+card is an Israeli-chart song** (positions 3, 6, 9, ...), roughly a third
+of the deck. Israeli cards are tagged with the 🇮🇱 flag. Duplicates that
+appear on both charts are kept once, on the Israeli side.
+
+Note: YouTube's IL chart is "most popular music in Israel," which is
+mostly Hebrew/Israeli artists but can include international hits popular
+there. It's not a pure Israeli-artist feed — no free chart is — but it
+skews strongly Israeli. The curated fallback list includes hand-picked
+Israeli tracks (Netta, Static & Ben El, Ofra Haza, Omer Adam, ...) so the
+priority holds even offline.
+
+- Cache refreshes at most once every 12 hours. The first load after that
+  does one YouTube call; everyone else reads the cached copy for free.
+- Force a refresh anytime by visiting `/api/top?refresh=1`.
+- Change the chart's country with the `TOP_REGION` env var (`IL`, `GB`,
+  `US`, ...). Default is `US`.
+- Each fetched song already includes its YouTube video id, so playback
+  skips the search step entirely for chart songs — extra quota savings.
+- If the live fetch fails (no key, offline, quota), the app falls back to
+  a curated list of 40 songs baked into the page, so it always works.
+
+Because it's "most-popular music videos," the deck skews to whatever's
+trending right now and can include non-pop or non-English megahits. For a
+camp that variety is usually a plus; if you want stricter control, edit
+the curated fallback list (`FALLBACK_SONGS`) in `index.html` — it shows
+whenever the live fetch is unavailable.
 
 ---
 

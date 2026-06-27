@@ -277,8 +277,8 @@ async function sendVote(song,choice){
   }catch(e){/* offline-tolerant: local state still updates */}
 }
 
-/* ---------- Song pool: popular tracks from around the world ---------- */
-const SONGS = [
+/* ---------- Song pool: curated fallback (used if live fetch fails) ---------- */
+const FALLBACK_SONGS = [
   {s:"Flowers",a:"Miley Cyrus",c:"USA",f:"🇺🇸",g:"Pop",col:"#E8623B"},
   {s:"As It Was",a:"Harry Styles",c:"UK",f:"🇬🇧",g:"Pop",col:"#F2A43B"},
   {s:"Despacito",a:"Luis Fonsi",c:"Puerto Rico",f:"🇵🇷",g:"Reggaeton",col:"#2BB3A3"},
@@ -319,7 +319,36 @@ const SONGS = [
   {s:"Vois sur ton chemin",a:"BENNETT",c:"Germany",f:"🇩🇪",g:"Techno",col:"#E8623B"},
   {s:"Tití Me Preguntó",a:"Bad Bunny",c:"Puerto Rico",f:"🇵🇷",g:"Reggaeton",col:"#F2A43B"},
   {s:"Unstoppable",a:"Sia",c:"Australia",f:"🇦🇺",g:"Pop",col:"#9B59B6"},
+  {s:"Toy",a:"Netta",c:"Israel",f:"🇮🇱",g:"Israeli",col:"#2BB3A3",il:1},
+  {s:"Golden Boy",a:"Nadav Guedj",c:"Israel",f:"🇮🇱",g:"Israeli",col:"#E8623B",il:1},
+  {s:"Tudo Bom",a:"Static & Ben El",c:"Israel",f:"🇮🇱",g:"Israeli",col:"#F2A43B",il:1},
+  {s:"Im Nin'alu",a:"Ofra Haza",c:"Israel",f:"🇮🇱",g:"Israeli",col:"#7A5CB0",il:1},
+  {s:"Yo Ya",a:"Static & Ben El",c:"Israel",f:"🇮🇱",g:"Israeli",col:"#2BB3A3",il:1},
+  {s:"Halaila",a:"Omer Adam",c:"Israel",f:"🇮🇱",g:"Israeli",col:"#E8623B",il:1},
+  {s:"Bo'i",a:"Idan Raichel",c:"Israel",f:"🇮🇱",g:"Israeli",col:"#9B59B6",il:1},
+  {s:"Milim",a:"Hanan Ben Ari",c:"Israel",f:"🇮🇱",g:"Israeli",col:"#F2A43B",il:1},
 ];
+
+/* The active deck — starts as the curated list, replaced by the live
+   top-music chart when /api/top responds. */
+let SONGS = FALLBACK_SONGS.slice();
+let SONGS_PREORDERED = false;  // live deck is interleaved server-side; don't reshuffle
+
+/* Fetch the live top-pop deck (cached server-side in Blob). Falls back to
+   the curated list on any failure so the app always works. */
+async function loadSongs(){
+  try{
+    const res=await fetch('/api/top');
+    const data=await res.json();
+    if(data&&data.ok&&Array.isArray(data.songs)&&data.songs.length>=10){
+      SONGS=data.songs;
+      SONGS_PREORDERED=true;   // keep the IL/global interleave intact
+      return data.source;
+    }
+  }catch(e){/* offline or error — keep fallback */}
+  SONGS_PREORDERED=false;
+  return 'fallback';
+}
 
 /* ---------- State ---------- */
 const $=id=>document.getElementById(id);
@@ -329,16 +358,19 @@ function shuffle(arr){const a=arr.slice();for(let i=a.length-1;i>0;i--){const j=
 function load(){try{const d=JSON.parse(localStorage.getItem('mb_swipe')||'{}');liked=d.liked||[];seen=d.seen||0;leftCount=d.left||0;}catch(e){}}
 function save(){try{localStorage.setItem('mb_swipe',JSON.stringify({liked,seen,left:leftCount}));}catch(e){}}
 
-function startApp(){
+async function startApp(){
   load();
   loadIdCache();
-  order=shuffle(SONGS.map((_,i)=>i));
-  idx=0; history=[];
   showWhoami();
   document.getElementById('campVotes').style.display=(AUTH&&AUTH.admin)?'':'none';
-  renderCounters(); buildDeck();
   $('empty').style.display='none'; $('results').style.display='none';
   $('deck').style.display='block'; $('controls').style.display='flex'; $('hint').style.display='block';
+  // show a brief loading state while we fetch the live top-pop deck
+  $('deck').innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--cream);opacity:.8">Loading top tracks…</div>';
+  await loadSongs();
+  order=SONGS_PREORDERED?SONGS.map((_,i)=>i):shuffle(SONGS.map((_,i)=>i));
+  idx=0; history=[];
+  renderCounters(); buildDeck();
 }
 
 function init(){
@@ -451,6 +483,8 @@ function resetVinyl(v){
 function setIcon(v,sym){const ic=v.querySelector('.play .ic');if(ic)ic.innerHTML=sym;}
 
 async function findVideoId(song){
+  // live top-music songs already carry their video id — no search needed
+  if(song.vid)return {id:song.vid,err:null,cached:true};
   const key=song.s+'|'+song.a;
   // cache hit (including pre-verified and previously resolved) — no request
   if(idCache[key]!==undefined){
@@ -569,7 +603,7 @@ function showEmpty(){
   $('empty').style.display='flex';
 }
 $('seeResults').onclick=showResults;
-$('reshuffle').onclick=()=>{order=shuffle(SONGS.map((_,i)=>i));idx=0;history=[];$('empty').style.display='none';$('deck').style.display='block';$('controls').style.display='flex';$('hint').style.display='block';buildDeck();};
+$('reshuffle').onclick=()=>{order=SONGS_PREORDERED?SONGS.map((_,i)=>i):shuffle(SONGS.map((_,i)=>i));idx=0;history=[];$('empty').style.display='none';$('deck').style.display='block';$('controls').style.display='flex';$('hint').style.display='block';buildDeck();};
 
 function showResults(){
   stopAudio();
