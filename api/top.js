@@ -18,7 +18,7 @@ async function blob() {
 }
 
 const CACHE_HOURS = 12;
-const DECK_VERSION = 9;   // bump when song shape changes (forces cache rebuild)
+const DECK_VERSION = 10;   // bump when song shape changes (forces cache rebuild)
 const MAX = 50;           // YouTube mostPopular caps at 50 per region
 const PER_DECADE = 40;    // how many to pull from each Deezer decade playlist
 const COLORS = ["#E8623B", "#F2A43B", "#2BB3A3", "#7A5CB0", "#9B59B6", "#E8623B"];
@@ -201,12 +201,57 @@ async function allDecadeSongs() {
 /* ---------- interleave (every 3rd Israeli) ---------- */
 
 // Detect Arabic script (incl. Arabic Supplement, Extended, and Presentation
-// Forms used by Arabic, Persian, Urdu, etc.). Used to drop Arabic-language
-// tracks from every pool. Note: this catches Arabic *script* only — songs
-// whose title/artist are transliterated into Latin letters won't match.
+// Forms used by Arabic, Persian, Urdu, etc.).
 const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+
+// Transliterated Arabic (written in Latin letters) can't be caught by script
+// detection, so we also match common Arabic words and well-known Arabic-world
+// artists by name. Word-boundary matched to avoid false hits inside other
+// words. Extend the env vars DROP_WORDS / DROP_ARTISTS (comma-separated) to
+// tune without code changes.
+const AR_WORDS = (
+  "habibi,habiba,ya leili,ya lili,ya habibi,3enaya," +
+  "inshallah,mashallah,bahibak,bahebak,bahebek,wahashtini,3omri,ya omri," +
+  "dabke,dabka,sha3bi,shaabi,raqs sharqi,khaleeji,ya albi,ya alby"
+).split(",").map((s) => s.trim()).filter(Boolean);
+
+const AR_ARTISTS = (
+  "amr diab,tamer hosny,saad lamjarred,nancy ajram,fairuz,fairouz," +
+  "umm kulthum,om kalthoum,oum kalthoum,mohamed ramadan,wael kfoury," +
+  "wael jassar,kadim al sahir,kadhem al saher,balqees," +
+  "myriam fares,najwa karam,haifa wehbe,ragheb alama,george wassouf," +
+  "abdel halim hafez,mohamed hamaki,tamer ashour,ramy sabry,ramy gamal," +
+  "marwan khoury,carole samaha,samira said,sherine abdel wahab," +
+  "hussain al jassmi,cheb khaled,cheb mami,rachid taha,zap tharwat," +
+  "marwan pablo,cairokee,mohammed assaf,nassif zeytoun,elyanna,saif nabeel"
+).split(",").map((s) => s.trim()).filter(Boolean);
+
+function envList(name) {
+  return (process.env[name] || "")
+    .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+const EXTRA_WORDS = envList("DROP_WORDS");
+const EXTRA_ARTISTS = envList("DROP_ARTISTS");
+
+function hasWord(hay, words) {
+  for (const w of words) {
+    if (!w) continue;
+    // match as a whole word/phrase, case-insensitive
+    const re = new RegExp("(^|[^a-z0-9])" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^a-z0-9]|$)", "i");
+    if (re.test(hay)) return true;
+  }
+  return false;
+}
+
 function isArabic(song) {
-  return ARABIC_RE.test(song.s || "") || ARABIC_RE.test(song.a || "");
+  const title = song.s || "";
+  const artist = song.a || "";
+  if (ARABIC_RE.test(title) || ARABIC_RE.test(artist)) return true;     // script
+  const t = title.toLowerCase(), a = artist.toLowerCase();
+  if (hasWord(a, AR_ARTISTS) || hasWord(a, EXTRA_ARTISTS)) return true;  // artist name
+  if (hasWord(t, AR_WORDS) || hasWord(t, EXTRA_WORDS)) return true;      // title words
+  if (hasWord(a, AR_WORDS) || hasWord(a, EXTRA_WORDS)) return true;      // artist words
+  return false;
 }
 function dropArabic(list) {
   return list.filter((s) => !isArabic(s));

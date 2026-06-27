@@ -189,6 +189,17 @@ Each card shows its era as a genre tag (80s / 90s / 2000s / 2010s /
 Eurovision / Top music / Israel chart), so people can see what they're
 hearing. Eurovision songs get a ✨ flag.
 
+### Filtering out Arabic-language songs
+
+Every pool is passed through a filter that drops Arabic tracks two ways:
+by **script** (any title/artist written in Arabic letters) and by a
+curated list of **transliterated** Arabic words and well-known Arabic-world
+artist names (for songs written in Latin letters, which script detection
+can't catch). The list is tuned to avoid false positives — Hebrew and
+English songs are never affected. It won't be 100% on transliterated
+songs; to add specific ones, set comma-separated env vars: `DROP_ARTISTS`
+(artist names) and `DROP_WORDS` (title keywords). No code change needed.
+
 ### Israeli prioritization
 
 All the non-Israeli songs (current hits + every decade) form one pool;

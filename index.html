@@ -170,6 +170,11 @@
         border-radius:50%;background:#000000aa;color:#fff;font-size:17px;font-weight:700;line-height:1;
         display:none;align-items:center;justify-content:center;padding:0}
   .art.playing .yt-close{display:flex}
+  .yt-unmute{position:absolute;top:8px;left:8px;z-index:6;border:none;cursor:pointer;
+        border-radius:999px;background:var(--gold);color:#3a2410;font-size:12px;font-weight:900;line-height:1;
+        padding:7px 12px;display:none;align-items:center;gap:4px;box-shadow:0 2px 8px #0005}
+  .art.playing.muted .yt-unmute{display:inline-flex}
+  .yt-unmute:active{transform:scale(.95)}
   .yt-grip{position:absolute;left:0;right:0;bottom:0;z-index:6;height:46px;display:none;
         align-items:center;justify-content:center;gap:7px;cursor:grab;
         background:linear-gradient(to top,#000000cc,transparent);color:#fff;font-size:12px;font-weight:700}
@@ -548,6 +553,7 @@ function paint(canvas,col){
 function shade(hex,amt){let c=hex.replace('#','');let n=parseInt(c,16);let r=Math.max(0,Math.min(255,(n>>16)+amt));let gg=Math.max(0,Math.min(255,((n>>8)&255)+amt));let b=Math.max(0,Math.min(255,(n&255)+amt));return'#'+((r<<16)|(gg<<8)|b).toString(16).padStart(6,'0');}
 
 /* ---------- Deck ---------- */
+let pendingAutoplay=null;
 function buildDeck(autoplay){
   const deck=$('deck'); deck.innerHTML='';
   if(idx>=order.length){refillDeck();return;}
@@ -564,7 +570,8 @@ function buildDeck(autoplay){
     if(real===0){card.classList.add('top');attachDrag(card);topCard=card;topSong=SONGS[songIdx];}
   });
   if(autoplay&&topCard&&topSong){
-    setTimeout(()=>{autoplayCard(topCard,topSong);},450);
+    if(pendingAutoplay)clearTimeout(pendingAutoplay);
+    pendingAutoplay=setTimeout(()=>{pendingAutoplay=null;autoplayCard(topCard,topSong);},450);
   }
 }
 function makeCard(song,rank){
@@ -581,6 +588,7 @@ function makeCard(song,rank){
       </div>
       <div class="ytmount"></div>
       <button class="yt-close" type="button" aria-label="close">✕</button>
+      <button class="yt-unmute" type="button" aria-label="unmute">🔊 unmute</button>
       <div class="yt-grip">⇄ swipe here to vote</div>
       ${song.preview?'':'<div class="no-preview"><i class="nopv-ic">⚠</i> No preview · watch on YouTube</div>'}
       <div class="audio-hint">${song.preview?'tap the record to play':'tap the record for the full song on YouTube'}</div>
@@ -619,12 +627,15 @@ function resetVinyl(w){
 }
 function setIcon(w,sym){const ic=w.querySelector('.play .ic');if(ic)ic.innerHTML=sym;}
 
+let playGen=0;   // increments whenever playback is stopped/superseded
 function stopAudio(){
-  if(dzAudio){try{dzAudio.pause();}catch(e){}dzAudio=null;}
+  playGen++;     // invalidate any in-flight async play continuations
+  if(typeof pendingAutoplay!=='undefined'&&pendingAutoplay){clearTimeout(pendingAutoplay);pendingAutoplay=null;}
+  if(dzAudio){try{dzAudio.pause();dzAudio.src='';}catch(e){}dzAudio=null;}
   if(ytPlayer){try{ytPlayer.stopVideo();ytPlayer.destroy();}catch(e){}ytPlayer=null;}
   if(rafId){cancelAnimationFrame(rafId);rafId=null;}
   if(activeCard){
-    const art=activeCard.querySelector('.art');if(art)art.classList.remove('playing');
+    const art=activeCard.querySelector('.art');if(art){art.classList.remove('playing');art.classList.remove('muted');}
     const m=activeCard.querySelector('.ytmount');if(m){m.classList.remove('on');m.innerHTML='';}
     resetVinyl(activeCard.querySelector('.vinyl-wrap'));
     const h=activeCard.querySelector('.audio-hint');if(h)h.textContent='tap the record to play';
@@ -653,6 +664,13 @@ function attachAudio(card,song){
   const art=card.querySelector('.art');
   const ytClose=card.querySelector('.yt-close');
   if(ytClose)ytClose.addEventListener('click',(e)=>{e.stopPropagation();stopAudio();});
+  const ytUnmute=card.querySelector('.yt-unmute');
+  if(ytUnmute)ytUnmute.addEventListener('click',(e)=>{
+    e.stopPropagation();
+    try{if(ytPlayer){ytPlayer.unMute();ytPlayer.setVolume(100);}}catch(err){}
+    art.classList.remove('muted');
+    const hh=card.querySelector('.audio-hint');if(hh)hh.textContent='full song';
+  });
   let busy=false;
   wrap.addEventListener('click',async(e)=>{
     e.stopPropagation();
@@ -672,6 +690,7 @@ function attachAudio(card,song){
       }
     }
     stopAudio();
+    const myGen=playGen;
     busy=true;
     activeCard=card;
     vinyl.classList.add('playing');vinyl.classList.remove('paused');
@@ -681,43 +700,32 @@ function attachAudio(card,song){
       setIcon(wrap,'<span class="ldr"></span>');
       if(hint)hint.textContent='loading preview\u2026';
       const url=await freshPreview(song);
+      // aborted/superseded while resolving the URL?
+      if(myGen!==playGen){busy=false;return;}
       if(!url){busy=false;resetVinyl(wrap);if(hint)hint.textContent='preview unavailable';return;}
       const audio=new Audio(url);audio.volume=1;dzAudio=audio;
       const fg=wrap.querySelector('.fg');
       audio.play().then(()=>{
+        if(myGen!==playGen){try{audio.pause();}catch(e){}return;}
         busy=false;
         wrap.querySelector('.play').classList.add('hidden');
         if(hint)hint.textContent='preview \u00b7 30 sec';
-      }).catch(()=>{busy=false;setIcon(wrap,'\u25B6');toast('Tap again to play');});
+      }).catch(()=>{busy=false;if(myGen!==playGen)return;setIcon(wrap,'\u25B6');toast('Tap again to play');});
       const tick=()=>{
-        if(dzAudio!==audio)return;
+        if(dzAudio!==audio||myGen!==playGen)return;
         const p=audio.duration?audio.currentTime/audio.duration:0;
         if(fg)fg.style.strokeDashoffset=282.7*(1-p);
         rafId=requestAnimationFrame(tick);
       };
       tick();
-      audio.onended=()=>{resetVinyl(wrap);if(hint)hint.textContent='tap to replay';};
+      audio.onended=()=>{if(myGen!==playGen)return;resetVinyl(wrap);if(hint)hint.textContent='tap to replay';};
       return;
     }
 
-    /* Fallback: full song via YouTube embed. */
+    /* Fallback: full song via YouTube embed (unmuted — this is a user tap). */
     if(song.vid){
-      setIcon(wrap,'<span class="ldr"></span>');
-      if(hint)hint.textContent='loading full song\u2026';
-      if(!ytApiReady){let tries=0;while(!ytApiReady&&tries<40){await new Promise(r=>setTimeout(r,100));tries++;}}
-      if(!ytApiReady){busy=false;resetVinyl(wrap);if(hint)hint.textContent='player unavailable';return;}
-      const mount=card.querySelector('.ytmount');
-      mount.classList.add('on');mount.innerHTML='<div></div>';
-      art.classList.add('playing');
-      ytPlayer=new YT.Player(mount.firstChild,{
-        videoId:song.vid,
-        playerVars:{autoplay:1,playsinline:1,rel:0,modestbranding:1},
-        events:{
-          onReady:(ev)=>{busy=false;ev.target.playVideo();if(hint)hint.textContent='full song';},
-          onError:()=>{busy=false;if(hint)hint.textContent='can\u2019t play this one \u2014 swipe on';stopAudio();},
-          onStateChange:(ev)=>{if(ev.data===YT.PlayerState.ENDED){if(hint)hint.textContent='tap to replay';}}
-        }
-      });
+      await playYouTube(card,song,false);
+      busy=false;
       return;
     }
 
@@ -749,41 +757,92 @@ function attachYouTube(card,song){
   btn.addEventListener('mousedown',e=>e.stopPropagation());
 }
 
-/* Autoplay the top card's Deezer preview (only previews, not YouTube embeds —
-   auto-launching video on every swipe would be jarring and heavy). Browser
-   autoplay rules may block this until the user's first manual tap; if so it
-   fails silently and the card just waits for a tap. */
+/* Start the in-card YouTube embed for a song. `muted` lets autoplay satisfy
+   browser policy (muted video autoplays where unmuted is blocked). Returns
+   true if it started the embed. */
+async function playYouTube(card,song,muted){
+  if(!song.vid)return false;
+  const myGen=playGen;
+  const wrap=card.querySelector('.vinyl-wrap');
+  const hint=card.querySelector('.audio-hint');
+  const art=card.querySelector('.art');
+  setIcon(wrap,'<span class="ldr"></span>');
+  if(hint)hint.textContent='loading full song\u2026';
+  if(!ytApiReady){let tries=0;while(!ytApiReady&&tries<40){await new Promise(r=>setTimeout(r,100));tries++;}}
+  if(myGen!==playGen)return false;                 // superseded while waiting
+  if(!ytApiReady){resetVinyl(wrap);if(hint)hint.textContent='player unavailable';return false;}
+  if(activeCard!==card)return false;
+  const mount=card.querySelector('.ytmount');
+  mount.classList.add('on');mount.innerHTML='<div></div>';
+  art.classList.add('playing');
+  if(muted)art.classList.add('muted'); else art.classList.remove('muted');
+  ytPlayer=new YT.Player(mount.firstChild,{
+    videoId:song.vid,
+    playerVars:{autoplay:1,playsinline:1,rel:0,modestbranding:1,mute:muted?1:0},
+    events:{
+      onReady:(ev)=>{
+        // if playback was superseded before the player became ready, don't start
+        if(myGen!==playGen){try{ev.target.stopVideo();ev.target.destroy();}catch(e){}return;}
+        try{if(muted)ev.target.mute();ev.target.playVideo();}catch(e){}
+        if(hint)hint.textContent=muted?'playing muted':'full song';
+      },
+      onError:()=>{if(myGen!==playGen)return;if(hint)hint.textContent='can\u2019t play this one \u2014 swipe on';stopAudio();},
+      onStateChange:(ev)=>{if(ev.data===YT.PlayerState.ENDED){if(hint)hint.textContent='tap to replay';}}
+    }
+  });
+  return true;
+}
+
+/* Autoplay the top card after a swipe: Deezer preview if it has one, else the
+   YouTube embed (muted, to satisfy autoplay policy — user taps 🔊 to unmute).
+   Browser autoplay rules may still block the FIRST one on a fresh page load
+   until the user's first manual tap; if so we leave the card in a clear
+   "tap to play" state rather than failing silently. */
 let autoplayEnabled=true;
 try{const v=localStorage.getItem('mb_autoplay');if(v==='0')autoplayEnabled=false;}catch(e){}
 async function autoplayCard(card,song){
-  if(!autoplayEnabled||!song||!song.preview)return;
+  if(!autoplayEnabled||!song)return;
   const wrap=card.querySelector('.vinyl-wrap');
   const vinyl=wrap?wrap.querySelector('.vinyl'):null;
   const hint=card.querySelector('.audio-hint');
   const fg=wrap?wrap.querySelector('.fg'):null;
   stopAudio();
+  const myGen=playGen;
   activeCard=card;
+
+  // No Deezer preview but has a YouTube video -> autoplay the embed.
+  // We try UNMUTED (plays with sound once the user has interacted with the
+  // page, which by the first swipe they have). If the browser still blocks
+  // unmuted autoplay, the embed shows its play button to tap.
+  if(!song.preview){
+    if(song.vid){ await playYouTube(card,song,false); }
+    return;
+  }
+
   if(vinyl){vinyl.classList.add('playing');vinyl.classList.remove('paused');}
   const url=await freshPreview(song);
   // if something else started playing while we resolved, abort
-  if(activeCard!==card||!url){if(!url&&wrap)resetVinyl(wrap);return;}
+  if(myGen!==playGen||activeCard!==card||!url){if(myGen===playGen&&!url&&wrap)resetVinyl(wrap);return;}
   const audio=new Audio(url);audio.volume=1;dzAudio=audio;
   audio.play().then(()=>{
+    if(myGen!==playGen){try{audio.pause();}catch(e){}return;}
     const play=wrap&&wrap.querySelector('.play');if(play)play.classList.add('hidden');
     if(hint)hint.textContent='preview \u00b7 30 sec';
   }).catch(()=>{
-    // autoplay blocked — reset quietly, user can tap to start
+    if(myGen!==playGen)return;
+    // autoplay blocked by the browser — show a clear tap-to-play state
     if(wrap)resetVinyl(wrap);
+    if(hint)hint.textContent='tap ▶ to play';
     if(activeCard===card){dzAudio=null;activeCard=null;}
   });
   const tick=()=>{
-    if(dzAudio!==audio)return;
+    if(dzAudio!==audio||myGen!==playGen)return;
     const p=audio.duration?audio.currentTime/audio.duration:0;
     if(fg)fg.style.strokeDashoffset=282.7*(1-p);
     rafId=requestAnimationFrame(tick);
   };
   tick();
-  audio.onended=()=>{if(wrap)resetVinyl(wrap);if(hint)hint.textContent='tap to replay';};
+  audio.onended=()=>{if(myGen!==playGen)return;if(wrap)resetVinyl(wrap);if(hint)hint.textContent='tap to replay';};
 }
 
 /* ---------- Drag / swipe ---------- */
