@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Midburn Sounds · Swipe the Playlist</title>
 <style>
   :root{
@@ -11,7 +11,7 @@
     --shadow:0 18px 40px -18px rgba(42,34,51,.55);
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;height:100%}
+  html,body{margin:0;height:100%;height:100dvh}
   body{
     font-family:'Helvetica Neue',Arial,sans-serif;
     color:var(--ink);
@@ -19,9 +19,13 @@
       radial-gradient(900px 500px at 50% -10%, #F6C66B33, transparent 60%),
       radial-gradient(700px 600px at 120% 110%, #E8623B33, transparent 55%),
       linear-gradient(180deg,#2B1F38 0%, #5A3A52 38%, #C97A4A 78%, #E9C58B 100%);
+    background-attachment:fixed;
     overflow:hidden; user-select:none; -webkit-user-select:none;
+    overscroll-behavior:none; -webkit-tap-highlight-color:transparent;
+    -webkit-text-size-adjust:100%;
   }
-  .app{position:fixed;inset:0;display:flex;flex-direction:column;max-width:520px;margin:0 auto}
+  .app{position:fixed;inset:0;height:100dvh;display:flex;flex-direction:column;max-width:520px;margin:0 auto;
+       padding-top:env(safe-area-inset-top)}
 
   header{padding:18px 22px 6px;text-align:center;color:var(--cream)}
   .brand{font-weight:800;letter-spacing:.14em;font-size:13px;opacity:.85;text-transform:uppercase}
@@ -36,12 +40,14 @@
   .pill b{color:var(--gold)}
   .pill.liked b{color:#7CF2D8}
 
-  .stage{flex:1;position:relative;display:flex;align-items:center;justify-content:center;padding:8px 20px 0}
-  .deck{position:relative;width:100%;max-width:360px;height:min(58vh,470px)}
+  .stage{flex:1;position:relative;display:flex;align-items:center;justify-content:center;padding:8px 16px 0;min-height:0}
+  .deck{position:relative;width:100%;max-width:360px;height:100%;max-height:480px;margin:0 auto}
 
   .card{position:absolute;inset:0;border-radius:26px;overflow:hidden;
         background:var(--cream);box-shadow:var(--shadow);
-        display:flex;flex-direction:column;will-change:transform;cursor:grab;border:1px solid #00000010}
+        display:flex;flex-direction:column;will-change:transform;cursor:grab;border:1px solid #00000010;
+        touch-action:pan-y}
+  .card.top{touch-action:none}
   .card .art{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
   .card .art canvas{position:absolute;inset:0;width:100%;height:100%}
   .vinyl{position:relative;width:46%;aspect-ratio:1;border-radius:50%;
@@ -88,7 +94,7 @@
        padding:13px 26px;font-weight:800;font-size:15px;cursor:pointer;box-shadow:var(--shadow)}
   .cta.ghost{background:#ffffff22;color:var(--cream);border:1px solid #ffffff44;box-shadow:none}
 
-  .results{overflow:auto;justify-content:flex-start;padding-top:24px}
+  .results{overflow:auto;-webkit-overflow-scrolling:touch;justify-content:flex-start;padding-top:24px;padding-bottom:max(24px,env(safe-area-inset-bottom))}
   .list{width:100%;max-width:380px;text-align:left;margin-top:14px}
   .row{display:flex;align-items:center;gap:12px;background:#ffffff14;border:1px solid #ffffff22;
        border-radius:14px;padding:10px 12px;margin-bottom:8px}
@@ -126,7 +132,9 @@
   .art.playing .vinyl,.art.playing .flag,.art.playing .rank,.art.playing canvas{visibility:hidden}
 
   .login{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;
-         padding:30px;background:linear-gradient(180deg,#2B1F38,#5A3A52 55%,#C97A4A);color:var(--cream)}
+         padding:30px;padding-top:max(30px,env(safe-area-inset-top));padding-bottom:max(30px,env(safe-area-inset-bottom));
+         background:linear-gradient(180deg,#2B1F38,#5A3A52 55%,#C97A4A);color:var(--cream);
+         overflow-y:auto;-webkit-overflow-scrolling:touch}
   .login .brand{font-weight:800;letter-spacing:.14em;font-size:13px;opacity:.85;text-transform:uppercase}
   .login h1{font-size:30px;font-weight:900;margin:6px 0 2px;text-align:center}
   .login p{opacity:.85;font-size:14px;margin:0 0 22px;text-align:center;max-width:300px}
@@ -151,6 +159,25 @@
   .person h4{margin:0 0 6px;font-size:15px;font-weight:800;display:flex;justify-content:space-between}
   .person .cnt{font-size:12px;font-weight:700;color:var(--gold)}
   .person .songs{font-size:12.5px;opacity:.85;line-height:1.5}
+  @media (max-height: 700px){
+    header{padding:10px 20px 4px}
+    .title{font-size:22px}
+    .sub{font-size:11.5px;margin-top:1px}
+    .counters{margin-top:8px}
+    .whoami{margin-top:2px}
+  }
+  @media (max-height: 600px){
+    .title{font-size:19px}
+    .sub{display:none}
+    .counters{margin-top:6px}
+    .controls{padding:10px 0 max(12px,env(safe-area-inset-bottom))}
+    .btn{width:54px;height:54px;font-size:22px}
+  }
+  @media (max-width: 360px){
+    .pill{padding:4px 9px;font-size:11px}
+    .counters{gap:7px}
+    header{padding-left:14px;padding-right:14px}
+  }
 </style>
 </head>
 <body>
@@ -410,7 +437,7 @@ function buildDeck(){
     card.style.zIndex=10-depth;
     card.style.opacity=depth>1?0:1;
     deck.appendChild(card);
-    if(real===0) attachDrag(card);
+    if(real===0){card.classList.add('top');attachDrag(card);}
   });
 }
 function makeCard(song,rank){
@@ -553,6 +580,8 @@ function attachDrag(card){
   const stampR=card.querySelector('.stampR'),stampL=card.querySelector('.stampL');
   const down=e=>{drag=true;const p=pt(e);sx=p.x;sy=p.y;card.style.transition='none';card.style.cursor='grabbing';};
   const move=e=>{if(!drag)return;const p=pt(e);dx=p.x-sx;dy=p.y-sy;
+    // once the gesture is clearly horizontal, stop the page from scrolling
+    if(e.cancelable&&Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>6)e.preventDefault();
     card.style.transform=`translate(${dx}px,${dy}px) rotate(${dx*0.06}deg)`;
     const r=Math.min(1,Math.max(0,dx/120)),l=Math.min(1,Math.max(0,-dx/120));
     stampR.style.opacity=r;stampL.style.opacity=l;};
@@ -560,7 +589,7 @@ function attachDrag(card){
     if(dx>110){fly(card,1);}else if(dx<-110){fly(card,-1);}
     else{card.style.transform='';stampR.style.opacity=0;stampL.style.opacity=0;}dx=0;dy=0;};
   card.addEventListener('mousedown',down);window.addEventListener('mousemove',move);window.addEventListener('mouseup',up);
-  card.addEventListener('touchstart',down,{passive:true});card.addEventListener('touchmove',move,{passive:true});card.addEventListener('touchend',up);
+  card.addEventListener('touchstart',down,{passive:true});card.addEventListener('touchmove',move,{passive:false});card.addEventListener('touchend',up);
 }
 function pt(e){return e.touches?{x:e.touches[0].clientX,y:e.touches[0].clientY}:{x:e.clientX,y:e.clientY};}
 
