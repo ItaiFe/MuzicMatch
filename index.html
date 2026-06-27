@@ -69,9 +69,15 @@
   .tag{font-size:11px;font-weight:700;padding:4px 9px;border-radius:999px;background:#2A22330d;color:#5a4f59}
   .tag.genre{background:#2BB3A31f;color:#1d7d72}
   .tag.country{background:#E8623B1f;color:#b8431f}
+  .tag.preview{background:#2BB3A31f;color:#1d7d72}
   .yt-btn{font-size:11px;font-weight:800;padding:4px 11px;border-radius:999px;border:none;cursor:pointer;
           background:#FF000014;color:#c4302b;margin-left:auto;display:inline-flex;align-items:center;gap:3px}
   .yt-btn:active{transform:scale(.95)}
+  .yt-btn.primary{background:#c4302b;color:#fff;padding:5px 13px;box-shadow:0 2px 8px #c4302b55}
+  .no-preview{position:absolute;top:52px;left:50%;transform:translateX(-50%);z-index:5;
+          background:#000000cc;color:#FFD27A;font-size:12px;font-weight:800;padding:6px 13px;border-radius:999px;
+          display:flex;align-items:center;gap:5px;white-space:nowrap;box-shadow:0 2px 10px #0006}
+  .no-preview .nopv-ic{font-style:normal;font-size:13px}
 
   .stampL,.stampR{position:absolute;top:26px;font-size:30px;font-weight:900;letter-spacing:.05em;
                   padding:6px 14px;border-radius:12px;border:4px solid;opacity:0;transform:rotate(-12deg);
@@ -127,6 +133,9 @@
   .ldr{width:26px;height:26px;border:3px solid #ffffff55;border-top-color:#7CF2D8;border-radius:50%;
        animation:ld .8s linear infinite}
   @keyframes ld{to{transform:rotate(360deg)}}
+  .refill{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:var(--cream)}
+  .refill-spinner{width:48px;height:48px;border:4px solid #ffffff33;border-top-color:var(--gold);border-radius:50%;animation:ld .8s linear infinite}
+  .refill-text{font-size:15px;font-weight:800;opacity:.9;letter-spacing:.01em}
   .audio-hint{position:absolute;bottom:10px;left:0;right:0;text-align:center;color:#fff;
         font-size:11px;font-weight:700;opacity:.85;text-shadow:0 1px 3px #000;z-index:3;pointer-events:none}
   .ytmount{position:absolute;inset:0;z-index:4;display:none;background:#000}
@@ -222,10 +231,10 @@
     <div class="deck" id="deck"></div>
 
     <div class="empty" id="empty">
-      <h2>That's the whole crate 🎶</h2>
-      <p>You've gone through every track. Check what made the cut, or reshuffle for another round.</p>
+      <h2>You've heard them all 🎶</h2>
+      <p>You've swiped through every track we've got right now. Check what made your cut, or start over to swipe them all again.</p>
       <button class="cta" id="seeResults">See the playlist →</button>
-      <button class="cta ghost" id="reshuffle" style="margin-top:10px">Reshuffle deck</button>
+      <button class="cta ghost" id="reshuffle" style="margin-top:10px">Start over</button>
     </div>
 
     <div class="results" id="results">
@@ -356,7 +365,6 @@ const FALLBACK_SONGS = [
 /* The active deck — starts as the curated list, replaced by the live
    top-music chart when /api/top responds. */
 let SONGS = FALLBACK_SONGS.slice();
-let SONGS_PREORDERED = false;  // live deck is interleaved server-side; don't reshuffle
 
 /* Fetch the live top-pop deck (cached server-side in Blob). Falls back to
    the curated list on any failure so the app always works. */
@@ -366,11 +374,9 @@ async function loadSongs(){
     const data=await res.json();
     if(data&&data.ok&&Array.isArray(data.songs)&&data.songs.length>=10){
       SONGS=data.songs;
-      SONGS_PREORDERED=true;   // keep the IL/global interleave intact
       return data.source;
     }
   }catch(e){/* offline or error — keep fallback */}
-  SONGS_PREORDERED=false;
   return 'fallback';
 }
 
@@ -379,11 +385,49 @@ const $=id=>document.getElementById(id);
 let order=[], idx=0, liked=[], seen=0, leftCount=0, history=[];
 
 function shuffle(arr){const a=arr.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+/* Build a fresh randomized play order each time, but keep the Israeli
+   cadence: shuffle Israeli songs among themselves and the rest among
+   themselves, then re-interleave so every 3rd card is still Israeli. */
+function shuffledOrder(){
+  const il=[], rest=[];
+  SONGS.forEach((s,i)=>{(s&&s.il?il:rest).push(i);});
+  const sIl=shuffle(il), sRest=shuffle(rest);
+  // if there are no Israeli songs (e.g. fallback offline), just shuffle all
+  if(!sIl.length)return shuffle(SONGS.map((_,i)=>i));
+  const out=[];let gi=0,ii=0,pos=0;const total=sIl.length+sRest.length;
+  while(out.length<total){
+    pos++;
+    if(pos%3===0&&ii<sIl.length)out.push(sIl[ii++]);
+    else if(gi<sRest.length)out.push(sRest[gi++]);
+    else if(ii<sIl.length)out.push(sIl[ii++]);
+    else break;
+  }
+  return out;
+}
 function load(){try{const d=JSON.parse(localStorage.getItem('mb_swipe')||'{}');liked=d.liked||[];seen=d.seen||0;leftCount=d.left||0;}catch(e){}}
 function save(){try{localStorage.setItem('mb_swipe',JSON.stringify({liked,seen,left:leftCount}));}catch(e){}}
 
+/* Per-person "already seen" set, persisted so reloads don't re-show songs.
+   Keyed by a stable id (deezer id, youtube id, or title|artist). */
+let seenSet=new Set();
+function songKey(song){return 'd'+(song.did||song.vid||(song.s+'|'+song.a));}
+function loadSeen(){
+  try{const a=JSON.parse(localStorage.getItem('mb_seen')||'[]');seenSet=new Set(a);}catch(e){seenSet=new Set();}
+}
+function markSeen(song){
+  seenSet.add(songKey(song));
+  try{localStorage.setItem('mb_seen',JSON.stringify([...seenSet].slice(-2000)));}catch(e){}
+}
+/* Indices of songs the person hasn't seen yet, in fresh randomized order. */
+function unseenOrder(){
+  const full=shuffledOrder();
+  return full.filter(i=>!seenSet.has(songKey(SONGS[i])));
+}
+
 async function startApp(){
   load();
+  loadSeen();
   showWhoami();
   document.getElementById('campVotes').style.display=(AUTH&&AUTH.admin)?'':'none';
   $('empty').style.display='none'; $('results').style.display='none';
@@ -391,7 +435,7 @@ async function startApp(){
   // show a brief loading state while we fetch the live top-pop deck
   $('deck').innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--cream);opacity:.8">Loading top tracks…</div>';
   await loadSongs();
-  order=SONGS_PREORDERED?SONGS.map((_,i)=>i):shuffle(SONGS.map((_,i)=>i));
+  order=unseenOrder();
   idx=0; history=[];
   renderCounters(); buildDeck();
 }
@@ -423,7 +467,7 @@ function shade(hex,amt){let c=hex.replace('#','');let n=parseInt(c,16);let r=Mat
 /* ---------- Deck ---------- */
 function buildDeck(autoplay){
   const deck=$('deck'); deck.innerHTML='';
-  if(idx>=order.length){showEmpty();return;}
+  if(idx>=order.length){refillDeck();return;}
   const upcoming=order.slice(idx,idx+3).reverse();
   let topCard=null,topSong=null;
   upcoming.forEach((songIdx,i)=>{
@@ -452,7 +496,8 @@ function makeCard(song,rank){
         <div class="play"><span class="ic">▶</span></div>
       </div>
       <div class="ytmount"></div>
-      <div class="audio-hint">tap the record to play</div>
+      ${song.preview?'':'<div class="no-preview"><i class="nopv-ic">⚠</i> No preview · watch on YouTube</div>'}
+      <div class="audio-hint">${song.preview?'tap the record to play':'tap the record for the full song on YouTube'}</div>
     </div>
     <div class="stampR">LIKE</div>
     <div class="stampL">NOPE</div>
@@ -462,7 +507,8 @@ function makeCard(song,rank){
       <div class="tags">
         ${song.c?`<span class="tag country">${song.c}</span>`:''}
         <span class="tag genre">${song.g}</span>
-        <button class="yt-btn" type="button">▶ YouTube</button>
+        ${song.preview?'<span class="tag preview">▶ 30s preview</span>':''}
+        <button class="yt-btn${song.preview?'':' primary'}" type="button">▶ YouTube</button>
       </div>
     </div>`;
   paint(c.querySelector('canvas'),song.col);
@@ -664,6 +710,7 @@ function decide(dir){
   if(dir===1){if(!liked.includes(songIdx))liked.push(songIdx);toast('♥ Added to the camp playlist');}
   else{leftCount++;}
   sendVote(SONGS[songIdx],dir===1?'like':'skip');
+  markSeen(SONGS[songIdx]);
   seen++; idx++; save(); renderCounters();
 }
 
@@ -683,12 +730,52 @@ $('undo').onclick=()=>{
 $('results-btn').onclick=showResults;
 
 /* ---------- Empty + results ---------- */
+
+/* When the deck runs out: show a brief loader, pull fresh songs, and refill
+   with tracks this person hasn't seen. Only truly empty -> show empty state. */
+let refilling=false;
+async function refillDeck(){
+  if(refilling)return; refilling=true;
+  stopAudio();
+  const deck=$('deck');
+  deck.innerHTML='<div class="refill"><div class="refill-spinner"></div><div class="refill-text">Loading more songs…</div></div>';
+  $('controls').style.display='flex';$('hint').style.display='block';
+
+  // 1) try songs already loaded that this person hasn't seen
+  let next=unseenOrder();
+
+  // 2) if none left, fetch a fresh pool from the server (new chart entries)
+  if(!next.length){
+    try{
+      const res=await fetch('/api/top?refresh=1');
+      const data=await res.json();
+      if(data&&data.ok&&Array.isArray(data.songs)&&data.songs.length>=10){
+        SONGS=data.songs;
+        next=unseenOrder();
+      }
+    }catch(e){/* offline — fall through */}
+  }
+
+  // small minimum so the animation is visible, not a flash
+  await new Promise(r=>setTimeout(r,650));
+
+  if(next.length){
+    order=next; idx=0; history=[];
+    refilling=false;
+    buildDeck(true);
+  }else{
+    // genuinely nothing new for this person — offer a full replay
+    refilling=false;
+    showEmpty();
+  }
+}
+
 function showEmpty(){
   $('deck').style.display='none';$('controls').style.display='none';$('hint').style.display='none';
   $('empty').style.display='flex';
 }
 $('seeResults').onclick=showResults;
-$('reshuffle').onclick=()=>{order=SONGS_PREORDERED?SONGS.map((_,i)=>i):shuffle(SONGS.map((_,i)=>i));idx=0;history=[];$('empty').style.display='none';$('deck').style.display='block';$('controls').style.display='flex';$('hint').style.display='block';buildDeck();};
+$('reshuffle').onclick=()=>{seenSet=new Set();try{localStorage.removeItem('mb_seen');}catch(e){}order=shuffledOrder();idx=0;history=[];$('empty').style.display='none';$('deck').style.display='block';$('controls').style.display='flex';$('hint').style.display='block';buildDeck();};
 
 function showResults(){
   stopAudio();
@@ -705,7 +792,7 @@ function showResults(){
     list.appendChild(row);
   });
 }
-$('backToSwipe').onclick=()=>{$('results').style.display='none';if(idx>=order.length){showEmpty();}else{$('deck').style.display='block';$('controls').style.display='flex';$('hint').style.display='block';buildDeck();}};
+$('backToSwipe').onclick=()=>{$('results').style.display='none';$('deck').style.display='block';$('controls').style.display='flex';$('hint').style.display='block';buildDeck();};
 $('copyList').onclick=()=>{
   if(!liked.length){toast('No liked songs yet');return;}
   const txt='🔥 Midburn Camp Playlist 🔥\n\n'+liked.map((si,i)=>`${i+1}. ${SONGS[si].s} — ${SONGS[si].a}`).join('\n');

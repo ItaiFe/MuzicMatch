@@ -8,10 +8,18 @@
 // Cached in Blob (songs/top.json) so the YouTube quota + Deezer lookups
 // happen at most once per CACHE_HOURS, not per visitor.
 
-import { put, list } from "@vercel/blob";
+// Lazy-load @vercel/blob so a load failure is catchable (clean fallback)
+// rather than crashing the whole function with a 502.
+let _blob = null;
+async function blob() {
+  if (_blob) return _blob;
+  _blob = await import("@vercel/blob");
+  return _blob;
+}
 
 const CACHE_HOURS = 12;
-const MAX = 30;
+const DECK_VERSION = 3;   // bump when song shape changes (forces cache rebuild)
+const MAX = 50;           // YouTube mostPopular caps at 50 per region
 const COLORS = ["#E8623B", "#F2A43B", "#2BB3A3", "#7A5CB0", "#9B59B6", "#E8623B"];
 const CACHE_PATH = "songs/top.json";
 
@@ -30,10 +38,13 @@ async function fetchJson(url, bust) {
 async function readCache() {
   if (!blobConfigured()) return null;
   try {
+    const { list } = await blob();
     const { blobs } = await list({ prefix: CACHE_PATH, limit: 1 });
     if (!blobs || !blobs.length || blobs[0].pathname !== CACHE_PATH) return null;
     const data = await fetchJson(blobs[0].url, true);
     if (!data || !data.fetchedAt || !Array.isArray(data.songs)) return null;
+    // invalidate caches written by an older deck schema (no previews etc.)
+    if (data.v !== DECK_VERSION) return { ...data, stale: true };
     const ageHrs = (Date.now() - data.fetchedAt) / 3600000;
     if (ageHrs > CACHE_HOURS) return { ...data, stale: true };
     return data;
@@ -42,6 +53,7 @@ async function readCache() {
 async function writeCache(payload) {
   if (!blobConfigured()) return;
   try {
+    const { put } = await blob();
     await put(CACHE_PATH, JSON.stringify(payload), {
       access: "public", contentType: "application/json",
       allowOverwrite: true, addRandomSuffix: false, cacheControlMaxAge: 0,
@@ -186,7 +198,7 @@ export default async function handler(req, res) {
   try {
     const songs = await buildDeck(key);
     if (!songs.length) throw new Error("empty deck");
-    const payload = { songs, fetchedAt: Date.now() };
+    const payload = { songs, fetchedAt: Date.now(), v: DECK_VERSION };
     await writeCache(payload);
     const withPreview = songs.filter((s) => s.preview).length;
     res.status(200).json({ ok: true, songs, source: "youtube+deezer", fetchedAt: payload.fetchedAt, previews: withPreview });

@@ -43,6 +43,6 @@ export default async function handler(req, res) {
     res.status(200).json({ ok: true });
   } catch (e) {
     console.error("vote error", e);
-    res.status(502).json({ ok: false, error: "store failed" });
+    res.status(502).json({ ok: false, error: "store failed", detail: String(e && e.message || e) });
   }
 }

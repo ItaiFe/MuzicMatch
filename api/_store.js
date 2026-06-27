@@ -7,8 +7,16 @@
 // one shared file, two simultaneous swipes would race and lose a vote.
 // Giving each person their own file removes the race entirely.
 
-import { put, list } from "@vercel/blob";
 import crypto from "crypto";
+
+// Lazy-load @vercel/blob so a missing/incompatible package surfaces as a
+// catchable runtime error (clean JSON) instead of crashing the function (502).
+let _blob = null;
+async function blob() {
+  if (_blob) return _blob;
+  _blob = await import("@vercel/blob");
+  return _blob;
+}
 
 export function blobConfigured() {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
@@ -34,6 +42,7 @@ async function fetchJson(url) {
 
 // Record/overwrite one person's vote on one song.
 export async function recordVote(songKey, name, choice) {
+  const { put, list } = await blob();
   const path = pathFor(name);
 
   // read existing file for this person (if any) so we merge, not clobber
@@ -57,6 +66,7 @@ export async function recordVote(songKey, name, choice) {
 
 // Read every person's file and return combined data.
 export async function readAll() {
+  const { list } = await blob();
   const { blobs } = await list({ prefix: "votes/" });
   const songs = {};   // songKey -> { name: choice }
   const voters = [];
