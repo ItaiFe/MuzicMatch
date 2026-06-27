@@ -18,7 +18,7 @@ async function blob() {
 }
 
 const CACHE_HOURS = 12;
-const DECK_VERSION = 10;   // bump when song shape changes (forces cache rebuild)
+const DECK_VERSION = 11;   // bump when song shape changes (forces cache rebuild)
 const MAX = 50;           // YouTube mostPopular caps at 50 per region
 const PER_DECADE = 40;    // how many to pull from each Deezer decade playlist
 const COLORS = ["#E8623B", "#F2A43B", "#2BB3A3", "#7A5CB0", "#9B59B6", "#E8623B"];
@@ -26,13 +26,23 @@ const CACHE_PATH = "songs/top.json";
 
 // Deezer playlists with preview + album art built in — no YouTube matching
 // needed. "Decades" series (Topsify) plus a Eurovision classics playlist.
-// Override any of them via env var if you want different curation.
+// Each carries an `x` exotic score 0..1 (0 = mainstream, 1 = very exotic),
+// used by the client "Experimentalis" slider. Override IDs via env var.
 const DECADES = [
-  { tag: "80s",  g: "80s",   playlist: process.env.DZ_80S  || "1321696237"  },
-  { tag: "90s",  g: "90s",   playlist: process.env.DZ_90S  || "11798812881" },
-  { tag: "00s",  g: "2000s", playlist: process.env.DZ_00S  || "11153531204" },
-  { tag: "10s",  g: "2010s", playlist: process.env.DZ_10S  || "11153461484" },
-  { tag: "esc",  g: "Eurovision", playlist: process.env.DZ_ESC || "4789690368" },
+  { tag: "80s",  g: "80s",   x: 0.10, playlist: process.env.DZ_80S  || "1321696237"  },
+  { tag: "90s",  g: "90s",   x: 0.10, playlist: process.env.DZ_90S  || "11798812881" },
+  { tag: "00s",  g: "2000s", x: 0.10, playlist: process.env.DZ_00S  || "11153531204" },
+  { tag: "10s",  g: "2010s", x: 0.10, playlist: process.env.DZ_10S  || "11153461484" },
+  { tag: "esc",  g: "Eurovision", x: 0.45, playlist: process.env.DZ_ESC || "4789690368" },
+];
+
+// World / "exotic" playlists — these are what the right end of the slider
+// pulls in. Higher `x` = more adventurous.
+const WORLD = [
+  { tag: "afro",  g: "Afrobeats", x: 0.85, playlist: process.env.DZ_AFRO  || "1763655002"  },
+  { tag: "india", g: "Bollywood", x: 0.95, playlist: process.env.DZ_INDIA || "6632095884"  },
+  { tag: "latin", g: "Reggaetón", x: 0.70, playlist: process.env.DZ_LATIN || "1273315391"  },
+  { tag: "kpop",  g: "K-pop",     x: 0.75, playlist: process.env.DZ_KPOP  || "2990755686"  },
 ];
 
 function blobConfigured() {
@@ -118,6 +128,7 @@ async function ytChart(key, region, isIsraeli) {
       col: COLORS[out.length % COLORS.length],
       vid: item.id,          // YouTube fallback
       il: isIsraeli ? 1 : 0,
+      x: 0,                  // current charts = most mainstream
     });
   }
   return out;
@@ -161,8 +172,9 @@ async function attachPreviews(songs) {
   return songs;
 }
 
-/* ---------- Deezer playlists: decade songs (preview built in) ---------- */
-async function deezerPlaylist(playlistId, genreLabel) {
+/* ---------- Deezer playlists: decade + world songs (preview built in) ---------- */
+const GENRE_FLAG = { Eurovision: "✨", Afrobeats: "🥁", Bollywood: "🎬", "Reggaetón": "🌴", "K-pop": "🇰🇷" };
+async function deezerPlaylist(playlistId, genreLabel, exotic) {
   const url =
     "https://api.deezer.com/playlist/" + playlistId + "/tracks?limit=" + PER_DECADE;
   const data = await fetchJson(url);
@@ -174,23 +186,25 @@ async function deezerPlaylist(playlistId, genreLabel) {
       s: (t.title_short || t.title).slice(0, 80),
       a: (t.artist && t.artist.name ? t.artist.name : "").slice(0, 60),
       c: "",
-      f: genreLabel === "Eurovision" ? "✨" : "🎵",
+      f: GENRE_FLAG[genreLabel] || "🎵",
       g: genreLabel,
       col: COLORS[out.length % COLORS.length],
       preview: t.preview,
       cover: (t.album && (t.album.cover_medium || t.album.cover)) || "",
       did: t.id,
       il: 0,
+      x: typeof exotic === "number" ? exotic : 0.1,   // exotic score 0..1
     });
   }
   return out;
 }
 
 async function allDecadeSongs() {
+  const sources = [...DECADES, ...WORLD];
   const lists = await Promise.all(
-    DECADES.map((d) =>
-      deezerPlaylist(d.playlist, d.g).catch((e) => {
-        console.error("decade " + d.tag + " failed", e);
+    sources.map((d) =>
+      deezerPlaylist(d.playlist, d.g, d.x).catch((e) => {
+        console.error("playlist " + d.tag + " failed", e);
         return [];
       })
     )

@@ -188,6 +188,16 @@ The deck spans four decades plus current hits. On load, the app calls
 Each card shows its era as a genre tag (80s / 90s / 2000s / 2010s /
 Eurovision / Top music / Israel chart), so people can see what they're
 hearing. Eurovision songs get a ✨ flag.
+- **World / exotic:** Afrobeats 🥁, Bollywood 🎬, Reggaetón 🌴, and K-pop 🇰🇷,
+  from Deezer (override with `DZ_AFRO`, `DZ_INDIA`, `DZ_LATIN`, `DZ_KPOP`).
+
+### The "Experimentalis" slider
+
+Every song carries an exotic score `x` (0 = mainstream chart, 1 = wild
+world music). The slider under the deck re-weights the upcoming cards: left
+favours top-charts, right favours exotic, with a **soft blend** so there's
+always some of both (even at the far ends). It only re-orders songs you
+haven't swiped yet, and the setting is remembered per device.
 
 ### Filtering out Arabic-language songs
 

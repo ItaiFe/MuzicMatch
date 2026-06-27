@@ -143,6 +143,16 @@
          box-shadow:var(--shadow);transition:transform .3s ease;z-index:50}
   .toast.show{transform:translateX(-50%) translateY(0)}
   .hint{color:var(--cream);opacity:.6;font-size:11.5px;text-align:center;padding:0 0 6px}
+  .exp-wrap{max-width:420px;margin:2px auto 4px;padding:0 18px;width:100%;box-sizing:border-box}
+  .exp-labels{display:flex;justify-content:space-between;align-items:center;color:var(--cream);
+        font-size:11px;font-weight:700;opacity:.85;margin-bottom:3px}
+  .exp-labels .exp-val{color:var(--gold);font-weight:900;font-size:11px;letter-spacing:.02em}
+  .exp-slider{-webkit-appearance:none;appearance:none;width:100%;height:7px;border-radius:999px;outline:none;
+        background:linear-gradient(to right,#2BB3A3 0%,#F2A43B 50%,#E84393 80%,#7A5CB0 100%);cursor:pointer}
+  .exp-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;
+        background:#fff;border:3px solid var(--gold);box-shadow:0 2px 8px #0006;cursor:grab;margin-top:0}
+  .exp-slider::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid var(--gold);box-shadow:0 2px 8px #0006;cursor:grab}
+  .exp-slider:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.1)}
 
   .vinyl{cursor:pointer}
   .vinyl.playing{animation-play-state:running}
@@ -339,6 +349,11 @@
     </div>
   </div>
 
+  <div class="exp-wrap" id="expWrap">
+    <div class="exp-labels"><span>📈 top charts</span><span class="exp-val" id="expVal">balanced</span><span>🌍 exotic</span></div>
+    <input type="range" id="expSlider" class="exp-slider" min="0" max="100" value="25">
+  </div>
+
   <div class="hint" id="hint">Drag the card · <a id="autoplayToggle" style="color:var(--gold);cursor:pointer;text-decoration:underline">autoplay: on</a></div>
   <div class="controls" id="controls">
     <button class="btn back" id="undo" title="Undo">↩</button>
@@ -474,15 +489,40 @@ let order=[], idx=0, liked=[], seen=0, leftCount=0, history=[];
 
 function shuffle(arr){const a=arr.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 
-/* Build a fresh randomized play order each time, but keep the Israeli
-   cadence: shuffle Israeli songs among themselves and the rest among
+/* "Experimentalis" slider 0..1: 0 = mainstream charts, 1 = exotic/world.
+   Soft blend — it re-weights ordering by each song's exotic score (x) but
+   never fully excludes anything. */
+let experimentalis=0.25;
+try{const v=parseFloat(localStorage.getItem('mb_exp'));if(!isNaN(v))experimentalis=v;}catch(e){}
+
+/* Weighted shuffle: songs whose exotic score is near the slider target sort
+   earlier (probabilistically). Floor keeps the mix soft so every song still
+   has a chance to appear. */
+function weightedShuffle(indices){
+  const t=experimentalis;
+  return indices
+    .map((i)=>{
+      const x=(SONGS[i]&&typeof SONGS[i].x==='number')?SONGS[i].x:0.1;
+      // closeness to target -> higher weight; soft floor of 0.15
+      const closeness=1-Math.abs(x-t);
+      const w=0.15+0.85*closeness;
+      // exponential of a uniform, scaled by weight = weighted random order key
+      const key=-Math.log(Math.random())/w;
+      return {i,key};
+    })
+    .sort((a,b)=>a.key-b.key)
+    .map((o)=>o.i);
+}
+
+/* Build a fresh play order each time, weighted by the slider, but keep the
+   Israeli cadence: order Israeli songs among themselves and the rest among
    themselves, then re-interleave so every 3rd card is still Israeli. */
 function shuffledOrder(){
   const il=[], rest=[];
   SONGS.forEach((s,i)=>{(s&&s.il?il:rest).push(i);});
-  const sIl=shuffle(il), sRest=shuffle(rest);
-  // if there are no Israeli songs (e.g. fallback offline), just shuffle all
-  if(!sIl.length)return shuffle(SONGS.map((_,i)=>i));
+  const sIl=shuffle(il), sRest=weightedShuffle(rest);
+  // if there are no Israeli songs (e.g. fallback offline), just weight all
+  if(!sIl.length)return weightedShuffle(SONGS.map((_,i)=>i));
   const out=[];let gi=0,ii=0,pos=0;const total=sIl.length+sRest.length;
   while(out.length<total){
     pos++;
@@ -1087,6 +1127,39 @@ document.getElementById('adminToggle').onclick=function(){
     sync();
     if(!autoplayEnabled)stopAudio();
   };
+})();
+
+/* ---------- Experimentalis slider ---------- */
+(function(){
+  const sl=document.getElementById('expSlider');
+  const val=document.getElementById('expVal');
+  if(!sl)return;
+  sl.value=Math.round(experimentalis*100);
+  function label(t){
+    if(t<0.15)return 'top charts';
+    if(t<0.38)return 'mostly hits';
+    if(t<0.62)return 'balanced';
+    if(t<0.85)return 'adventurous';
+    return 'full exotic';
+  }
+  function sync(){if(val)val.textContent=label(experimentalis);}
+  sync();
+  let reorderTimer=null;
+  sl.addEventListener('input',()=>{
+    experimentalis=sl.value/100;
+    try{localStorage.setItem('mb_exp',String(experimentalis));}catch(e){}
+    sync();
+    // debounce the re-ordering so dragging stays smooth
+    if(reorderTimer)clearTimeout(reorderTimer);
+    reorderTimer=setTimeout(()=>{
+      // keep songs already swiped AND the current card; re-weight the rest
+      const keep=order.slice(0,idx+1);
+      const keepSet=new Set(keep.map(i=>songKey(SONGS[i])));
+      const rest=unseenOrder().filter(i=>!keepSet.has(songKey(SONGS[i])));
+      order=keep.concat(rest);
+      buildDeck();
+    },250);
+  });
 })();
 
 /* ---------- CTA banner dismiss (remembered per device) ---------- */
