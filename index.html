@@ -242,7 +242,7 @@
     </div>
   </div>
 
-  <div class="hint" id="hint">Drag the card · or use the buttons below</div>
+  <div class="hint" id="hint">Drag the card · <a id="autoplayToggle" style="color:var(--gold);cursor:pointer;text-decoration:underline">autoplay: on</a></div>
   <div class="controls" id="controls">
     <button class="btn back" id="undo" title="Undo">↩</button>
     <button class="btn nope" id="nope" title="Skip">✕</button>
@@ -421,10 +421,11 @@ function paint(canvas,col){
 function shade(hex,amt){let c=hex.replace('#','');let n=parseInt(c,16);let r=Math.max(0,Math.min(255,(n>>16)+amt));let gg=Math.max(0,Math.min(255,((n>>8)&255)+amt));let b=Math.max(0,Math.min(255,(n&255)+amt));return'#'+((r<<16)|(gg<<8)|b).toString(16).padStart(6,'0');}
 
 /* ---------- Deck ---------- */
-function buildDeck(){
+function buildDeck(autoplay){
   const deck=$('deck'); deck.innerHTML='';
   if(idx>=order.length){showEmpty();return;}
   const upcoming=order.slice(idx,idx+3).reverse();
+  let topCard=null,topSong=null;
   upcoming.forEach((songIdx,i)=>{
     const real=upcoming.length-1-i;
     const card=makeCard(SONGS[songIdx],idx+real+1);
@@ -433,8 +434,11 @@ function buildDeck(){
     card.style.zIndex=10-depth;
     card.style.opacity=depth>1?0:1;
     deck.appendChild(card);
-    if(real===0){card.classList.add('top');attachDrag(card);}
+    if(real===0){card.classList.add('top');attachDrag(card);topCard=card;topSong=SONGS[songIdx];}
   });
+  if(autoplay&&topCard&&topSong){
+    setTimeout(()=>{autoplayCard(topCard,topSong);},450);
+  }
 }
 function makeCard(song,rank){
   const c=document.createElement('div'); c.className='card';
@@ -593,6 +597,39 @@ function attachYouTube(card,song){
   btn.addEventListener('mousedown',e=>e.stopPropagation());
 }
 
+/* Autoplay the top card's Deezer preview (only previews, not YouTube embeds —
+   auto-launching video on every swipe would be jarring and heavy). Browser
+   autoplay rules may block this until the user's first manual tap; if so it
+   fails silently and the card just waits for a tap. */
+let autoplayEnabled=true;
+try{const v=localStorage.getItem('mb_autoplay');if(v==='0')autoplayEnabled=false;}catch(e){}
+function autoplayCard(card,song){
+  if(!autoplayEnabled||!song||!song.preview)return;
+  const vinyl=card.querySelector('.vinyl');
+  const hint=card.querySelector('.audio-hint');
+  const fg=vinyl?vinyl.querySelector('.fg'):null;
+  stopAudio();
+  activeCard=card;
+  if(vinyl){vinyl.classList.add('playing');vinyl.classList.remove('paused');}
+  const audio=new Audio(song.preview);audio.volume=1;dzAudio=audio;
+  audio.play().then(()=>{
+    const play=vinyl&&vinyl.querySelector('.play');if(play)play.classList.add('hidden');
+    if(hint)hint.textContent='preview \u00b7 30 sec';
+  }).catch(()=>{
+    // autoplay blocked — reset quietly, user can tap to start
+    if(vinyl)resetVinyl(vinyl);
+    if(activeCard===card){dzAudio=null;activeCard=null;}
+  });
+  const tick=()=>{
+    if(dzAudio!==audio)return;
+    const p=audio.duration?audio.currentTime/audio.duration:0;
+    if(fg)fg.style.strokeDashoffset=289*(1-p);
+    rafId=requestAnimationFrame(tick);
+  };
+  tick();
+  audio.onended=()=>{if(vinyl)resetVinyl(vinyl);if(hint)hint.textContent='tap to replay';};
+}
+
 /* ---------- Drag / swipe ---------- */
 function attachDrag(card){
   let sx=0,sy=0,dx=0,dy=0,drag=false;
@@ -618,7 +655,7 @@ function fly(card,dir){
   card.style.transform=`translate(${dir*600}px,${ -40}px) rotate(${dir*35}deg)`;
   card.style.opacity=0;
   decide(dir);
-  setTimeout(()=>{buildDeck();},260);
+  setTimeout(()=>{buildDeck(true);},260);
 }
 
 function decide(dir){
@@ -631,8 +668,8 @@ function decide(dir){
 }
 
 /* buttons */
-$('like').onclick=()=>{stopAudio();const top=$('deck').lastChild;if(top&&idx<order.length){top.style.transition='transform .4s ease,opacity .4s ease';top.style.transform='translate(600px,-40px) rotate(35deg)';top.style.opacity=0;decide(1);setTimeout(buildDeck,260);}};
-$('nope').onclick=()=>{stopAudio();const top=$('deck').lastChild;if(top&&idx<order.length){top.style.transition='transform .4s ease,opacity .4s ease';top.style.transform='translate(-600px,-40px) rotate(-35deg)';top.style.opacity=0;decide(-1);setTimeout(buildDeck,260);}};
+$('like').onclick=()=>{stopAudio();const top=$('deck').lastChild;if(top&&idx<order.length){top.style.transition='transform .4s ease,opacity .4s ease';top.style.transform='translate(600px,-40px) rotate(35deg)';top.style.opacity=0;decide(1);setTimeout(()=>buildDeck(true),260);}};
+$('nope').onclick=()=>{stopAudio();const top=$('deck').lastChild;if(top&&idx<order.length){top.style.transition='transform .4s ease,opacity .4s ease';top.style.transform='translate(-600px,-40px) rotate(-35deg)';top.style.opacity=0;decide(-1);setTimeout(()=>buildDeck(true),260);}};
 $('undo').onclick=()=>{
   if(!history.length)return;
   stopAudio();
@@ -741,6 +778,20 @@ document.getElementById('adminToggle').onclick=function(){
   this.textContent=showing?'I\'m an organizer':'Just a regular voter';
   if(!showing)document.getElementById('loginAdmin').focus();
 };
+
+/* ---------- Autoplay toggle ---------- */
+(function(){
+  const el=document.getElementById('autoplayToggle');
+  if(!el)return;
+  const sync=()=>{el.textContent='autoplay: '+(autoplayEnabled?'on':'off');};
+  sync();
+  el.onclick=()=>{
+    autoplayEnabled=!autoplayEnabled;
+    try{localStorage.setItem('mb_autoplay',autoplayEnabled?'1':'0');}catch(e){}
+    sync();
+    if(!autoplayEnabled)stopAudio();
+  };
+})();
 
 init();
 </script>
