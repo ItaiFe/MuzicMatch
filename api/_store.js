@@ -119,3 +119,15 @@ export async function readAll() {
   }
   return { songs, voters, groupByName };
 }
+
+// Cheap public ranking: read only the per-song like tally (one file, no scan)
+// and return the top N song keys ordered by like count. NO counts returned —
+// callers only get the ranked names, so it's safe to expose to all users.
+export async function topLikedSongs(limit = 10) {
+  const tally = (await readPrivate("votes/_tally.json")) || {};
+  return Object.entries(tally)
+    .filter(([, n]) => Number(n) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+    .slice(0, limit)
+    .map(([songKey]) => songKey);
+}

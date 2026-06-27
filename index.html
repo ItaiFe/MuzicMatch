@@ -170,6 +170,30 @@
          background:#2A2233;color:#fff;padding:11px 18px;border-radius:999px;font-size:13px;font-weight:700;
          box-shadow:var(--shadow);transition:transform .3s ease;z-index:50}
   .toast.show{transform:translateX(-50%) translateY(0)}
+  /* ---- Hottest chart overlay ---- */
+  .hot-overlay{position:fixed;inset:0;z-index:200;background:rgba(15,10,22,.7);backdrop-filter:blur(6px);
+        display:none;align-items:center;justify-content:center;padding:20px}
+  .hot-overlay.show{display:flex;animation:hotFade .2s ease}
+  @keyframes hotFade{from{opacity:0}to{opacity:1}}
+  .hot-modal{position:relative;width:100%;max-width:380px;max-height:80vh;overflow-y:auto;
+        background:linear-gradient(160deg,#2A2233,#3B2A4A);border:1px solid #ffffff22;border-radius:22px;
+        padding:24px 20px 20px;box-shadow:0 30px 70px -20px #000a;animation:hotPop .28s cubic-bezier(.2,1.3,.4,1)}
+  @keyframes hotPop{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
+  .hot-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border:none;cursor:pointer;border-radius:50%;
+        background:#ffffff1c;color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .hot-head{color:#fff;font-size:22px;font-weight:900;text-align:center;text-shadow:0 2px 8px #0006}
+  .hot-sub{color:var(--cream);opacity:.7;font-size:12px;text-align:center;margin:4px 0 18px}
+  .hot-list{display:flex;flex-direction:column;gap:8px}
+  .hot-item{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:14px;
+        background:#ffffff10;border:1px solid #ffffff14}
+  .hot-item .hr{font-size:16px;font-weight:900;width:30px;text-align:center;flex:0 0 auto}
+  .hot-item .ht{color:#fff;font-size:13.5px;font-weight:700;line-height:1.3;overflow:hidden;text-overflow:ellipsis}
+  .hot-item.top1{background:linear-gradient(120deg,rgba(242,164,59,.3),rgba(232,98,59,.2));border-color:#F2A43B66}
+  .hot-item.top1 .hr{color:#FFD27A}
+  .hot-item.top2 .hr{color:#E8E8E8}
+  .hot-item.top3 .hr{color:#E0A878}
+  .hot-empty{color:var(--cream);opacity:.7;text-align:center;font-size:13px;padding:24px 8px}
+  .hot-loading{color:var(--cream);opacity:.8;text-align:center;font-size:13px;padding:24px 8px}
   .hint{color:var(--cream);opacity:.6;font-size:11.5px;text-align:center;padding:0 0 6px}
   .exp-wrap{max-width:440px;margin:18px auto 8px;padding:11px 16px 13px;width:100%;box-sizing:border-box;
         background:rgba(20,14,28,.55);backdrop-filter:blur(8px);border:1px solid #ffffff22;border-radius:16px;
@@ -403,7 +427,7 @@
     <input type="range" id="expSlider" class="exp-slider" min="0" max="100" value="25">
   </div>
 
-  <div class="hint" id="hint">Drag the card · <a id="autoplayToggle" style="color:var(--gold);cursor:pointer;text-decoration:underline">autoplay: on</a></div>
+  <div class="hint" id="hint">Drag the card · <a id="autoplayToggle" style="color:var(--gold);cursor:pointer;text-decoration:underline">autoplay: on</a> · <a id="hotChartBtn" style="color:var(--gold);cursor:pointer;text-decoration:underline">🔥 hottest</a></div>
   <div class="controls" id="controls">
     <button class="btn back" id="undo" title="Undo">↩</button>
     <button class="btn nope" id="nope" title="Skip">✕</button>
@@ -412,6 +436,15 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
+
+<div class="hot-overlay" id="hotOverlay">
+  <div class="hot-modal">
+    <button class="hot-close" id="hotClose" aria-label="close">✕</button>
+    <div class="hot-head">🔥 Hottest Right Now</div>
+    <div class="hot-sub">The camp's top picks · top 10</div>
+    <div class="hot-list" id="hotList"></div>
+  </div>
+</div>
 
 <script>
 /* ---------- Auth state ---------- */
@@ -1289,6 +1322,39 @@ document.getElementById('adminToggle').onclick=function(){
     sync();
     if(!autoplayEnabled)stopAudio();
   };
+})();
+
+/* ---------- Hottest songs chart (public, no counts) ---------- */
+(function(){
+  const btn=$('hotChartBtn'), ov=$('hotOverlay'), close=$('hotClose'), listEl=$('hotList');
+  if(!btn||!ov)return;
+  const medals=['🥇','🥈','🥉'];
+  function rowClass(i){return i===0?'top1':i===1?'top2':i===2?'top3':'';}
+  function rankLabel(i){return i<3?medals[i]:'#'+(i+1);}
+  async function open(){
+    ov.classList.add('show');
+    listEl.innerHTML='<div class="hot-loading">Loading the chart…</div>';
+    if(!AUTH||!AUTH.token){listEl.innerHTML='<div class="hot-empty">Log in to see the chart.</div>';return;}
+    try{
+      const r=await fetch('/api/hot?token='+encodeURIComponent(AUTH.token)+'&limit=10');
+      const d=await r.json();
+      const esc=s=>String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+      if(d&&d.ok&&d.songs&&d.songs.length){
+        listEl.innerHTML=d.songs.map((s,i)=>
+          `<div class="hot-item ${rowClass(i)}"><div class="hr">${rankLabel(i)}</div><div class="ht">${esc(s)}</div></div>`
+        ).join('');
+      }else{
+        listEl.innerHTML='<div class="hot-empty">No hot songs yet — start liking to build the chart! 🔥</div>';
+      }
+    }catch(e){
+      listEl.innerHTML='<div class="hot-empty">Couldn\u2019t load the chart. Try again in a moment.</div>';
+    }
+  }
+  function hide(){ov.classList.remove('show');}
+  btn.onclick=open;
+  close.onclick=hide;
+  ov.addEventListener('click',e=>{if(e.target===ov)hide();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ov.classList.contains('show'))hide();});
 })();
 
 /* ---------- Experimentalis slider ---------- */
