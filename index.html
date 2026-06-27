@@ -143,16 +143,21 @@
          box-shadow:var(--shadow);transition:transform .3s ease;z-index:50}
   .toast.show{transform:translateX(-50%) translateY(0)}
   .hint{color:var(--cream);opacity:.6;font-size:11.5px;text-align:center;padding:0 0 6px}
-  .exp-wrap{max-width:420px;margin:2px auto 4px;padding:0 18px;width:100%;box-sizing:border-box}
-  .exp-labels{display:flex;justify-content:space-between;align-items:center;color:var(--cream);
-        font-size:11px;font-weight:700;opacity:.85;margin-bottom:3px}
-  .exp-labels .exp-val{color:var(--gold);font-weight:900;font-size:11px;letter-spacing:.02em}
-  .exp-slider{-webkit-appearance:none;appearance:none;width:100%;height:7px;border-radius:999px;outline:none;
-        background:linear-gradient(to right,#2BB3A3 0%,#F2A43B 50%,#E84393 80%,#7A5CB0 100%);cursor:pointer}
-  .exp-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;
-        background:#fff;border:3px solid var(--gold);box-shadow:0 2px 8px #0006;cursor:grab;margin-top:0}
-  .exp-slider::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid var(--gold);box-shadow:0 2px 8px #0006;cursor:grab}
-  .exp-slider:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.1)}
+  .exp-wrap{max-width:440px;margin:6px auto 8px;padding:11px 16px 13px;width:100%;box-sizing:border-box;
+        background:rgba(20,14,28,.55);backdrop-filter:blur(8px);border:1px solid #ffffff22;border-radius:16px;
+        box-shadow:0 6px 20px -8px rgba(0,0,0,.5)}
+  .exp-title{display:flex;align-items:center;justify-content:center;gap:6px;color:#fff;font-size:12.5px;
+        font-weight:900;letter-spacing:.03em;margin-bottom:9px;text-transform:uppercase;text-shadow:0 1px 3px #0008}
+  .exp-title .exp-val{color:#FFD27A;font-weight:900}
+  .exp-labels{display:flex;justify-content:space-between;align-items:center;color:#fff;
+        font-size:11.5px;font-weight:800;margin-bottom:7px;text-shadow:0 1px 3px #000a}
+  .exp-slider{-webkit-appearance:none;appearance:none;width:100%;height:10px;border-radius:999px;outline:none;
+        background:linear-gradient(to right,#2BB3A3 0%,#F2A43B 45%,#E84393 78%,#9B59B6 100%);cursor:pointer;
+        box-shadow:0 0 0 1px #ffffff33 inset, 0 2px 6px #0006}
+  .exp-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:26px;height:26px;border-radius:50%;
+        background:#fff;border:4px solid var(--gold);box-shadow:0 3px 10px #0008, 0 0 0 2px #ffffff55;cursor:grab;margin-top:0}
+  .exp-slider::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:#fff;border:4px solid var(--gold);box-shadow:0 3px 10px #0008;cursor:grab}
+  .exp-slider:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.12)}
 
   .vinyl{cursor:pointer}
   .vinyl.playing{animation-play-state:running}
@@ -350,7 +355,8 @@
   </div>
 
   <div class="exp-wrap" id="expWrap">
-    <div class="exp-labels"><span>📈 top charts</span><span class="exp-val" id="expVal">balanced</span><span>🌍 exotic</span></div>
+    <div class="exp-title">🎛️ Experimentalis · <span class="exp-val" id="expVal">balanced</span></div>
+    <div class="exp-labels"><span>📈 top charts</span><span>🌍 exotic</span></div>
     <input type="range" id="expSlider" class="exp-slider" min="0" max="100" value="25">
   </div>
 
