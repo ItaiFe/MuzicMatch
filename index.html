@@ -1021,7 +1021,17 @@ $('copyList').onclick=()=>{
   navigator.clipboard?.writeText(txt).then(()=>toast('Playlist copied!'),()=>fallbackCopy(txt));
 };
 function fallbackCopy(txt){const t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);t.select();try{document.execCommand('copy');toast('Playlist copied!');}catch(e){toast('Copy failed');}t.remove();}
-$('resetAll').onclick=()=>{if(confirm('Reset your swipes on this device? (Your votes already sent to the camp tally stay counted.)')){liked=[];seen=0;leftCount=0;save();startApp();toast('Reset done');}};
+$('resetAll').onclick=()=>{
+  if(!confirm('Reset your swipes on this device? (Your votes already sent to the camp tally stay counted.)'))return;
+  stopAudio();
+  liked=[];seen=0;leftCount=0;history=[];
+  seenSet=new Set();
+  try{localStorage.removeItem('mb_seen');}catch(e){}
+  save();
+  $('results').style.display='none';
+  startApp();
+  toast('Reset done — all songs are back');
+};
 
 /* ---------- Toast ---------- */
 let toastT;
