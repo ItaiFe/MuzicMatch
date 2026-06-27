@@ -41,6 +41,29 @@
   .pill b{color:var(--gold)}
   .pill.liked b{color:#7CF2D8}
 
+  /* ---- Colorful Hebrew call-to-action banner ---- */
+  .cta-banner{position:relative;max-width:560px;margin:10px auto 0;padding:13px 38px 14px;
+        border-radius:18px;color:#fff;text-align:center;overflow:hidden;
+        background:linear-gradient(120deg,#E8623B 0%,#F2A43B 28%,#E84393 60%,#7A5CB0 100%);
+        background-size:200% 200%;animation:ctaShift 9s ease infinite;
+        box-shadow:0 10px 30px -10px rgba(232,67,147,.6),0 0 0 1px #ffffff22 inset}
+  @keyframes ctaShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+  .cta-banner.hide{display:none}
+  .cta-inner{position:relative;z-index:2}
+  .cta-head{font-size:15px;font-weight:900;letter-spacing:.01em;text-shadow:0 1px 4px #0003;margin-bottom:5px}
+  .cta-body{font-size:13px;font-weight:600;line-height:1.55;opacity:.98}
+  .cta-body b{color:#FFE08A;font-weight:900}
+  .cta-foot{font-size:11.5px;font-weight:600;opacity:.85;margin-top:6px;font-style:italic}
+  .cta-x{position:absolute;top:7px;left:9px;z-index:3;width:24px;height:24px;border:none;cursor:pointer;
+        border-radius:50%;background:#ffffff2e;color:#fff;font-size:17px;line-height:1;font-weight:700;
+        display:flex;align-items:center;justify-content:center;padding:0;transition:background .15s}
+  .cta-x:active{background:#ffffff55}
+  .cta-spark{position:absolute;z-index:1;font-size:20px;opacity:.5;pointer-events:none;animation:ctaFloat 4s ease-in-out infinite}
+  .cta-spark1{top:8px;right:14px;animation-delay:0s}
+  .cta-spark2{bottom:6px;right:40%;font-size:17px;animation-delay:1.2s}
+  .cta-spark3{top:10px;right:42%;font-size:15px;animation-delay:2.4s}
+  @keyframes ctaFloat{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-6px) rotate(8deg)}}
+
   .stage{flex:1;position:relative;display:flex;align-items:center;justify-content:center;padding:8px 16px 0;min-height:0}
   .deck{position:relative;width:100%;max-width:360px;height:100%;max-height:480px;margin:0 auto}
 
@@ -209,6 +232,10 @@
     .sub{font-size:11.5px;margin-top:1px}
     .counters{margin-top:8px}
     .whoami{margin-top:2px}
+    .cta-banner{margin-top:7px;padding:9px 34px 10px}
+    .cta-head{font-size:13.5px;margin-bottom:3px}
+    .cta-body{font-size:12px;line-height:1.4}
+    .cta-foot{display:none}
   }
   @media (max-height: 600px){
     .title{font-size:19px}
@@ -216,6 +243,10 @@
     .counters{margin-top:6px}
     .controls{padding:10px 0 max(12px,env(safe-area-inset-bottom))}
     .btn{width:54px;height:54px;font-size:22px}
+    .cta-banner{padding:7px 32px 8px}
+    .cta-head{font-size:12.5px}
+    .cta-body{font-size:11px}
+    .cta-spark{display:none}
   }
   @media (max-width: 360px){
     .pill{padding:4px 9px;font-size:11px}
@@ -258,6 +289,18 @@
       <div class="pill">Left <b id="cLeft">0</b></div>
     </div>
   </header>
+
+  <div class="cta-banner" id="ctaBanner" dir="rtl" lang="he">
+    <button class="cta-x" id="ctaClose" aria-label="סגור">×</button>
+    <div class="cta-spark cta-spark1">✨</div>
+    <div class="cta-spark cta-spark2">🎤</div>
+    <div class="cta-spark cta-spark3">🔥</div>
+    <div class="cta-inner">
+      <div class="cta-head">🎶 עזרו לנו לבנות את הפלייליסט המושלם 🎶</div>
+      <div class="cta-body">בחרו שירים שיגרמו לאנשים <b>לקפוץ לבמה</b> ולתת את הופעת חייהם – להיטים מוכרים, שירי דיוות, קלאסיקות ושירים עם אנרגיה.</div>
+      <div class="cta-foot">פחות שירי נישה, בעלי פתיחים ארוכים או שירים שרק אתם מכירים.</div>
+    </div>
+  </div>
 
   <div class="stage">
     <div class="deck" id="deck"></div>
@@ -973,6 +1016,15 @@ document.getElementById('adminToggle').onclick=function(){
     sync();
     if(!autoplayEnabled)stopAudio();
   };
+})();
+
+/* ---------- CTA banner dismiss (remembered per device) ---------- */
+(function(){
+  const ban=document.getElementById('ctaBanner');
+  if(!ban)return;
+  try{if(localStorage.getItem('mb_cta')==='0')ban.classList.add('hide');}catch(e){}
+  const x=document.getElementById('ctaClose');
+  if(x)x.onclick=()=>{ban.classList.add('hide');try{localStorage.setItem('mb_cta','0');}catch(e){}};
 })();
 
 init();
