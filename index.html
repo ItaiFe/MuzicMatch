@@ -195,6 +195,18 @@
   .hot-empty{color:var(--cream);opacity:.7;text-align:center;font-size:13px;padding:24px 8px}
   .hot-loading{color:var(--cream);opacity:.8;text-align:center;font-size:13px;padding:24px 8px}
   .hint{color:var(--cream);opacity:.6;font-size:11.5px;text-align:center;padding:0 0 6px}
+  .hot-chart-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:calc(100% - 32px);max-width:440px;
+        margin:16px auto 10px;border:none;cursor:pointer;position:relative;
+        padding:16px 22px;border-radius:16px;font-size:16px;font-weight:900;letter-spacing:.03em;color:#FFD93B;
+        background:#1a1020;
+        box-shadow:0 8px 26px -6px #000a, 0 0 0 2px #FFD93B, 0 0 22px -2px rgba(255,150,40,.55);
+        animation:hotBtnPulse 1.9s ease-in-out infinite;
+        text-shadow:0 0 12px rgba(255,180,40,.6);-webkit-tap-highlight-color:transparent;text-transform:uppercase}
+  .hot-chart-btn:active{transform:scale(.97)}
+  @keyframes hotBtnShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+  @keyframes hotBtnPulse{
+    0%,100%{box-shadow:0 8px 26px -6px #000a, 0 0 0 2px #FFD93B, 0 0 18px -2px rgba(255,150,40,.45)}
+    50%{box-shadow:0 8px 30px -4px #000c, 0 0 0 2px #FFE872, 0 0 34px 2px rgba(255,170,50,.75)}}
   .exp-wrap{max-width:440px;margin:18px auto 8px;padding:11px 16px 13px;width:100%;box-sizing:border-box;
         background:rgba(20,14,28,.55);backdrop-filter:blur(8px);border:1px solid #ffffff22;border-radius:16px;
         box-shadow:0 6px 20px -8px rgba(0,0,0,.5)}
@@ -427,7 +439,8 @@
     <input type="range" id="expSlider" class="exp-slider" min="0" max="100" value="25">
   </div>
 
-  <div class="hint" id="hint">Drag the card · <a id="autoplayToggle" style="color:var(--gold);cursor:pointer;text-decoration:underline">autoplay: on</a> · <a id="hotChartBtn" style="color:var(--gold);cursor:pointer;text-decoration:underline">🔥 hottest</a></div>
+  <button class="hot-chart-btn" id="hotChartBtn">🔥 See the hottest songs</button>
+  <div class="hint" id="hint">Drag the card · <a id="autoplayToggle" style="color:var(--gold);cursor:pointer;text-decoration:underline">autoplay: on</a></div>
   <div class="controls" id="controls">
     <button class="btn back" id="undo" title="Undo">↩</button>
     <button class="btn nope" id="nope" title="Skip">✕</button>
