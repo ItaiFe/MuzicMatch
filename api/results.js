@@ -9,10 +9,10 @@
 //    }
 
 import { verifyToken } from "./_auth.js";
-import { readAll, kvConfigured } from "./_kv.js";
+import { readAll, blobConfigured } from "./_store.js";
 
 export default async function handler(req, res) {
-  if (!kvConfigured()) {
+  if (!blobConfigured()) {
     res.status(500).json({ ok: false, error: "storage not configured" });
     return;
   }
@@ -54,7 +54,8 @@ export default async function handler(req, res) {
 
     songRows.sort((a, b) => b.likes - a.likes);
 
-    res.status(200).json({ ok: true, voters, songs: songRows, byPerson });
+    const uniqueVoters = [...new Set(voters)];
+    res.status(200).json({ ok: true, voters: uniqueVoters, songs: songRows, byPerson });
   } catch (e) {
     console.error("results error", e);
     res.status(502).json({ ok: false, error: "read failed" });

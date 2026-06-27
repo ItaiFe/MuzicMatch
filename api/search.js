@@ -14,7 +14,7 @@ const PER_IP_PER_MIN = 20;          // max searches per IP per minute
 const MAX_Q_LEN = 120;              // reject absurdly long queries
 
 // NOTE: in-memory counters reset when the function cold-starts. They are a
-// speed bump, not a guarantee. For hard limits use a KV store (see README).
+// speed bump, not a guarantee. For hard limits use a persistent store.
 let dayKey = "";
 let daySpent = 0;
 const ipHits = new Map();           // ip -> { count, windowStart }

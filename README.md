@@ -32,9 +32,9 @@ You need a free Vercel account: https://vercel.com/signup
 | `ADMIN_PASSWORD` | password that unlocks the results panel | recommended |
 | `ALLOWED_ORIGIN` | your live URL, e.g. `https://midburn-sounds.vercel.app` | recommended |
 
-Plus the KV storage variables, which Vercel adds automatically when you
-connect a KV/Upstash store (see "Central vote storage" below):
-`KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+Plus the storage variable, which Vercel adds automatically when you
+connect a Blob store (see "Central vote storage" below):
+`BLOB_READ_WRITE_TOKEN`.
 
 Set them all for the **Production** environment. `CAMP_SECRET` can be any
 random string — generate one with `openssl rand -hex 32` or just mash the
@@ -79,27 +79,41 @@ vercel --prod            # deploy to the live URL
 
 ---
 
-## Central vote storage (Vercel KV)
+## Central vote storage (Vercel Blob)
 
 The login + voting feature stores everyone's choices centrally so you can
-see the whole camp's votes in one place. It uses a Redis-compatible KV
-store via REST — either Vercel KV or Upstash.
+see the whole camp's votes in one place. It uses **Vercel Blob** — each
+person's votes live in their own small JSON file under `votes/`. The
+filename is a salted hash of the person's name (so the public file URL
+can't be guessed from someone's name), while their real name is stored
+inside the file.
 
-### Set it up (about 2 minutes)
+### Why per-person files
 
-1. In your Vercel project: **Storage -> Create Database -> KV** (or
-   **Marketplace -> Upstash**). Give it a name, create it.
-2. **Connect it to this project.** Vercel injects the credentials as
-   environment variables (`KV_REST_API_URL`, `KV_REST_API_TOKEN`).
-3. Redeploy so the functions pick them up.
+Blob has no atomic "update one field" operation. If everyone wrote to a
+single shared file, two people swiping at the same moment would both read
+the same version and the second write would erase the first one's vote.
+Giving each person their own file removes that race completely — nobody
+ever writes to anyone else's file.
 
-No schema, no tables. The code creates keys on the fly:
-- `song:<title — artist>` : a hash of `name -> like|skip` (one entry per
-  person per song, so re-swiping just overwrites)
-- `voters` : a set of everyone who has logged in and voted
+### Set it up (about 1 minute)
 
-If the KV variables aren't set, the login screen still works but
-voting/results return "storage not configured."
+1. In your Vercel project: **Storage -> Create Database -> Blob**.
+2. Create the store and **connect it to this project**.
+3. Vercel injects `BLOB_READ_WRITE_TOKEN` automatically.
+4. Redeploy so the functions pick it up.
+
+No schema, no tables, no marketplace step. If `BLOB_READ_WRITE_TOKEN`
+isn't set, the login screen still works but voting/results return
+"storage not configured."
+
+You can browse the raw `votes/*.json` files in the Vercel dashboard under
+the Blob store's Browse view.
+
+> Note: Blob reads can lag overwrites by up to ~60s due to CDN caching;
+> the code reads with cache-busting to get the latest, but the camp-wide
+> results may occasionally show a vote a few seconds late. Fine for a
+> playlist.
 
 ### How login works
 
@@ -159,7 +173,7 @@ Vercel. Never commit the key; `.env` is already in `.gitignore`.
 
 The in-memory rate limit/budget reset on cold starts, so they're a speed
 bump rather than a hard cap. If you want hard guarantees, back them with
-Vercel KV or Upstash Redis (a small change to `api/search.js`).
+a Blob counter or Upstash Redis (a small change to `api/search.js`).
 
 
 

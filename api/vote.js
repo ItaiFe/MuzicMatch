@@ -5,14 +5,14 @@
 // -> { ok: true }
 
 import { verifyToken } from "./_auth.js";
-import { recordVote, kvConfigured } from "./_kv.js";
+import { recordVote, blobConfigured } from "./_store.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ ok: false, error: "use POST" });
     return;
   }
-  if (!kvConfigured()) {
+  if (!blobConfigured()) {
     res.status(500).json({ ok: false, error: "storage not configured" });
     return;
   }
