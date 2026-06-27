@@ -18,7 +18,7 @@ async function blob() {
 }
 
 const CACHE_HOURS = 12;
-const DECK_VERSION = 8;   // bump when song shape changes (forces cache rebuild)
+const DECK_VERSION = 9;   // bump when song shape changes (forces cache rebuild)
 const MAX = 50;           // YouTube mostPopular caps at 50 per region
 const PER_DECADE = 40;    // how many to pull from each Deezer decade playlist
 const COLORS = ["#E8623B", "#F2A43B", "#2BB3A3", "#7A5CB0", "#9B59B6", "#E8623B"];
@@ -199,6 +199,19 @@ async function allDecadeSongs() {
 }
 
 /* ---------- interleave (every 3rd Israeli) ---------- */
+
+// Detect Arabic script (incl. Arabic Supplement, Extended, and Presentation
+// Forms used by Arabic, Persian, Urdu, etc.). Used to drop Arabic-language
+// tracks from every pool. Note: this catches Arabic *script* only — songs
+// whose title/artist are transliterated into Latin letters won't match.
+const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+function isArabic(song) {
+  return ARABIC_RE.test(song.s || "") || ARABIC_RE.test(song.a || "");
+}
+function dropArabic(list) {
+  return list.filter((s) => !isArabic(s));
+}
+
 function dedupe(list) {
   const seen = new Set(); const out = [];
   for (const s of list) {
@@ -239,8 +252,9 @@ async function buildDeck(key) {
   // YouTube songs need Deezer previews resolved; decade songs already have them
   if (currentSongs.length) await attachPreviews(currentSongs);
 
-  // non-Israeli pool = current hits + all decades, deduped
-  const nonIsraeli = dedupe([...currentSongs, ...decadeSongs]);
+  // non-Israeli pool = current hits + all decades, deduped, Arabic removed
+  const nonIsraeli = dropArabic(dedupe([...currentSongs, ...decadeSongs]));
+  israeliSongs = dropArabic(israeliSongs);
 
   // drop any that duplicate an Israeli-chart track (keep the Israeli version)
   const ilKeys = new Set(israeliSongs.map((s) => (s.s + "|" + s.a).toLowerCase()));
