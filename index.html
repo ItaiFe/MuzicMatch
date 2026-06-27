@@ -166,8 +166,13 @@
     <label for="loginPass">Camp passphrase</label>
     <input id="loginPass" type="password" placeholder="ask your camp lead" autocomplete="off">
   </div>
+  <div class="field" id="adminField" style="display:none">
+    <label for="loginAdmin">Admin password</label>
+    <input id="loginAdmin" type="password" placeholder="organizers only" autocomplete="off">
+  </div>
   <button class="go" id="loginGo">Let me in →</button>
   <div class="err" id="loginErr"></div>
+  <a id="adminToggle" style="color:var(--gold);cursor:pointer;font-size:12px;margin-top:14px;opacity:.85">I'm an organizer</a>
 </div>
 
 <div class="app">
@@ -233,6 +238,8 @@ function logout(){AUTH=null;try{localStorage.removeItem('mb_auth');}catch(e){}lo
 async function doLogin(){
   const name=document.getElementById('loginName').value.trim();
   const passphrase=document.getElementById('loginPass').value;
+  const adminEl=document.getElementById('loginAdmin');
+  const admin=adminEl?adminEl.value:'';
   const err=document.getElementById('loginErr');
   const btn=document.getElementById('loginGo');
   err.textContent='';
@@ -240,10 +247,13 @@ async function doLogin(){
   if(!passphrase){err.textContent='Enter the camp passphrase';return;}
   btn.disabled=true;btn.textContent='Checking…';
   try{
-    const res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,passphrase})});
+    const res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,passphrase,admin})});
     const data=await res.json();
-    if(!data.ok){err.textContent=data.error==='wrong passphrase'?'That passphrase isn\'t right':(data.error||'Login failed');btn.disabled=false;btn.textContent='Let me in →';return;}
-    AUTH={token:data.token,name:data.name};saveAuth();
+    if(!data.ok){
+      const msg=data.error==='wrong passphrase'?'That passphrase isn\'t right':data.error==='wrong admin password'?'Admin password isn\'t right':(data.error||'Login failed');
+      err.textContent=msg;btn.disabled=false;btn.textContent='Let me in →';return;
+    }
+    AUTH={token:data.token,name:data.name,admin:!!data.admin};saveAuth();
     document.getElementById('login').style.display='none';
     startApp();
   }catch(e){err.textContent='Network error — try again';btn.disabled=false;btn.textContent='Let me in →';}
@@ -251,8 +261,11 @@ async function doLogin(){
 
 function showWhoami(){
   const w=document.getElementById('whoami');
-  if(AUTH&&AUTH.name){w.innerHTML='Voting as <b>'+AUTH.name.replace(/[<>&]/g,'')+'</b> · <a id="logoutLink">not you?</a>';
-    const l=document.getElementById('logoutLink');if(l)l.onclick=logout;}
+  if(AUTH&&AUTH.name){
+    const badge=AUTH.admin?' · <b style="color:#7CF2D8">organizer</b>':'';
+    w.innerHTML='Voting as <b>'+AUTH.name.replace(/[<>&]/g,'')+'</b>'+badge+' · <a id="logoutLink">not you?</a>';
+    const l=document.getElementById('logoutLink');if(l)l.onclick=logout;
+  }
 }
 
 /* send a vote to the central store (best-effort, non-blocking) */
@@ -322,6 +335,7 @@ function startApp(){
   order=shuffle(SONGS.map((_,i)=>i));
   idx=0; history=[];
   showWhoami();
+  document.getElementById('campVotes').style.display=(AUTH&&AUTH.admin)?'':'none';
   renderCounters(); buildDeck();
   $('empty').style.display='none'; $('results').style.display='none';
   $('deck').style.display='block'; $('controls').style.display='flex'; $('hint').style.display='block';
@@ -638,6 +652,13 @@ $('backToSwipe').onclick=()=>{$('ppl').innerHTML='';$('list').style.display='';i
 document.getElementById('loginGo').onclick=doLogin;
 document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 document.getElementById('loginName').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('loginPass').focus();});
+document.getElementById('adminToggle').onclick=function(){
+  const f=document.getElementById('adminField');
+  const showing=f.style.display!=='none';
+  f.style.display=showing?'none':'block';
+  this.textContent=showing?'I\'m an organizer':'Just a regular voter';
+  if(!showing)document.getElementById('loginAdmin').focus();
+};
 
 init();
 </script>

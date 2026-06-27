@@ -29,6 +29,7 @@ You need a free Vercel account: https://vercel.com/signup
 | `YT_API_KEY`     | your YouTube Data API v3 key           | yes      |
 | `CAMP_PASSPHRASE`| the shared passphrase people type to get in | yes |
 | `CAMP_SECRET`    | any long random string (signs login tokens) | yes |
+| `ADMIN_PASSWORD` | password that unlocks the results panel | recommended |
 | `ALLOWED_ORIGIN` | your live URL, e.g. `https://midburn-sounds.vercel.app` | recommended |
 
 Plus the KV storage variables, which Vercel adds automatically when you
@@ -112,6 +113,26 @@ voting/results return "storage not configured."
   identity. Anyone could type any name. That's expected and fine here.
 - "See everyone's votes" shows top songs by likes plus a per-person
   breakdown, pulled live from the store.
+
+### Admin panel (organizer-only results)
+
+The full camp breakdown is gated so regular voters can't see it:
+
+- On the login screen, an organizer clicks **"I'm an organizer"**, which
+  reveals an admin-password field, and enters `ADMIN_PASSWORD` along with
+  the normal passphrase and their name.
+- Only then does the server mark their token `admin: true`. The
+  **"See everyone's votes"** button appears only for admins, and the
+  `/api/results` endpoint returns 403 for any non-admin token.
+- This is enforced **server-side**: the admin flag is inside the signed
+  token, so it can't be forged by editing browser storage or calling the
+  endpoint directly — without `CAMP_SECRET` the signature won't validate.
+- Regular voters still see their own liked-songs list; they just don't
+  get the camp-wide breakdown.
+
+If you don't set `ADMIN_PASSWORD`, nobody can open the admin panel (the
+button stays hidden and the endpoint stays locked). Set it to something
+different from the camp passphrase.
 
 ---
 

@@ -22,6 +22,10 @@ export default async function handler(req, res) {
     res.status(401).json({ ok: false, error: "not logged in" });
     return;
   }
+  if (!auth.admin) {
+    res.status(403).json({ ok: false, error: "admin only" });
+    return;
+  }
 
   try {
     const { songs, voters } = await readAll();
