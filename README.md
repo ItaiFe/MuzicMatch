@@ -181,10 +181,13 @@ The deck spans four decades plus current hits. On load, the app calls
   playlists — these already include a 30-second preview and album art, so
   they need no YouTube matching. Override any decade with the `DZ_80S`,
   `DZ_90S`, `DZ_00S`, `DZ_10S` env vars (Deezer playlist IDs).
+- **Eurovision:** a Deezer "Best Eurovision Songs of All Time" playlist
+  (four decades of classics). Override with the `DZ_ESC` env var.
 - **Israel:** YouTube's Israel chart (`regionCode=IL`).
 
-Each card shows its era as a genre tag (80s / 90s / 2000s / 2010s / Top
-music / Israel chart), so people can see what decade they're hearing.
+Each card shows its era as a genre tag (80s / 90s / 2000s / 2010s /
+Eurovision / Top music / Israel chart), so people can see what they're
+hearing. Eurovision songs get a ✨ flag.
 
 ### Israeli prioritization
 

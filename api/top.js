@@ -18,20 +18,21 @@ async function blob() {
 }
 
 const CACHE_HOURS = 12;
-const DECK_VERSION = 7;   // bump when song shape changes (forces cache rebuild)
+const DECK_VERSION = 8;   // bump when song shape changes (forces cache rebuild)
 const MAX = 50;           // YouTube mostPopular caps at 50 per region
 const PER_DECADE = 40;    // how many to pull from each Deezer decade playlist
 const COLORS = ["#E8623B", "#F2A43B", "#2BB3A3", "#7A5CB0", "#9B59B6", "#E8623B"];
 const CACHE_PATH = "songs/top.json";
 
-// Deezer "100 Greatest Songs of the decade" playlists (Topsify series).
-// These come with preview + album art built in — no YouTube matching needed.
+// Deezer playlists with preview + album art built in — no YouTube matching
+// needed. "Decades" series (Topsify) plus a Eurovision classics playlist.
 // Override any of them via env var if you want different curation.
 const DECADES = [
-  { tag: "80s",  g: "80s",  playlist: process.env.DZ_80S  || "1321696237"  },
-  { tag: "90s",  g: "90s",  playlist: process.env.DZ_90S  || "11798812881" },
-  { tag: "00s",  g: "2000s", playlist: process.env.DZ_00S || "11153531204" },
-  { tag: "10s",  g: "2010s", playlist: process.env.DZ_10S || "11153461484" },
+  { tag: "80s",  g: "80s",   playlist: process.env.DZ_80S  || "1321696237"  },
+  { tag: "90s",  g: "90s",   playlist: process.env.DZ_90S  || "11798812881" },
+  { tag: "00s",  g: "2000s", playlist: process.env.DZ_00S  || "11153531204" },
+  { tag: "10s",  g: "2010s", playlist: process.env.DZ_10S  || "11153461484" },
+  { tag: "esc",  g: "Eurovision", playlist: process.env.DZ_ESC || "4789690368" },
 ];
 
 function blobConfigured() {
@@ -173,7 +174,7 @@ async function deezerPlaylist(playlistId, genreLabel) {
       s: (t.title_short || t.title).slice(0, 80),
       a: (t.artist && t.artist.name ? t.artist.name : "").slice(0, 60),
       c: "",
-      f: "🎵",
+      f: genreLabel === "Eurovision" ? "✨" : "🎵",
       g: genreLabel,
       col: COLORS[out.length % COLORS.length],
       preview: t.preview,
