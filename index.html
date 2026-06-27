@@ -167,11 +167,41 @@
   .tabbtn{background:#ffffff22;color:var(--cream);border:1px solid #ffffff44;border-radius:999px;
           padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer}
   .tabbtn.active{background:var(--gold);color:#3a2410;border-color:var(--gold)}
-  .ppl{width:100%;max-width:420px;text-align:left;margin-top:8px}
+  .ppl{width:100%;max-width:440px;text-align:left;margin-top:8px}
   .person{background:#ffffff14;border:1px solid #ffffff22;border-radius:14px;padding:12px 14px;margin-bottom:10px}
   .person h4{margin:0 0 6px;font-size:15px;font-weight:800;display:flex;justify-content:space-between}
   .person .cnt{font-size:12px;font-weight:700;color:var(--gold)}
   .person .songs{font-size:12.5px;opacity:.85;line-height:1.5}
+
+  /* ---- Camp votes: search + collapsible sections ---- */
+  .vsearch{width:100%;max-width:440px;margin:4px 0 14px;position:relative}
+  .vsearch input{width:100%;box-sizing:border-box;background:#ffffff14;border:1px solid #ffffff33;
+        color:var(--cream);border-radius:999px;padding:11px 16px 11px 40px;font-size:14px;font-weight:600;outline:none}
+  .vsearch input::placeholder{color:#ffffff77}
+  .vsearch input:focus{border-color:var(--gold);background:#ffffff1f}
+  .vsearch .si{position:absolute;left:15px;top:50%;transform:translateY(-50%);opacity:.6;font-size:15px;pointer-events:none}
+  .vsec{width:100%;max-width:440px;margin-bottom:14px}
+  .vsec-head{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;
+        padding:10px 4px;color:var(--cream);font-size:15px;font-weight:800}
+  .vsec-head .chev{transition:transform .2s;font-size:12px;opacity:.7}
+  .vsec.collapsed .chev{transform:rotate(-90deg)}
+  .vsec-head .vcount{margin-left:auto;font-size:12px;font-weight:700;color:var(--gold);opacity:.9}
+  .vsec-body{overflow:hidden;transition:max-height .25s ease}
+  .vsec.collapsed .vsec-body{max-height:0!important}
+  .vrow{display:flex;align-items:center;gap:11px;background:#ffffff12;border:1px solid #ffffff1f;
+        border-radius:12px;padding:10px 12px;margin-bottom:7px}
+  .vrow .vrank{font-size:13px;font-weight:900;color:var(--gold);min-width:22px;text-align:center}
+  .vrow .vmain{flex:1;min-width:0}
+  .vrow .vtitle{font-size:14px;font-weight:800;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vrow .vsub{font-size:11.5px;opacity:.7;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .vbar{height:5px;border-radius:3px;background:#ffffff1f;margin-top:6px;overflow:hidden;display:flex}
+  .vbar .vlike{background:var(--teal);height:100%}
+  .vbar .vskip{background:#E8623B99;height:100%}
+  .vstat{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:11px;font-weight:800}
+  .vstat .vl{color:var(--teal)}
+  .vstat .vs{color:#E8623B;opacity:.85}
+  .vchip{display:inline-block;background:#ffffff1a;border-radius:6px;padding:1px 7px;margin:2px 3px 0 0;font-size:11px;opacity:.85}
+  .vempty{opacity:.7;text-align:center;padding:24px;font-size:13px}
   @media (max-height: 700px){
     header{padding:10px 20px 4px}
     .title{font-size:22px}
@@ -814,44 +844,84 @@ $('campVotes').onclick=async()=>{
   if(!AUTH||!AUTH.token){toast('Please log in');return;}
   const ppl=$('ppl');const list=$('list');
   list.style.display='none';
-  ppl.innerHTML='<div style="opacity:.8;text-align:center;padding:20px">Loading everyone\'s votes…</div>';
+  _campData=null;_campFilter='';
+  ppl.innerHTML='<div class="vempty">Loading everyone\'s votes…</div>';
   try{
     const res=await fetch('/api/results?token='+encodeURIComponent(AUTH.token));
     const data=await res.json();
-    if(!data.ok){ppl.innerHTML='<div style="opacity:.8;text-align:center;padding:20px">Couldn\'t load votes ('+(data.error||'error')+')</div>';return;}
+    if(!data.ok){ppl.innerHTML='<div class="vempty">Couldn\'t load votes ('+(data.error||'error')+')</div>';return;}
     renderCampVotes(data);
-  }catch(e){ppl.innerHTML='<div style="opacity:.8;text-align:center;padding:20px">Network error loading votes</div>';}
+  }catch(e){ppl.innerHTML='<div class="vempty">Network error loading votes</div>';}
 };
 
+let _campData=null, _campFilter='';
 function renderCampVotes(data){
+  if(data)_campData=data;
+  data=_campData;
   const ppl=$('ppl');
   const esc=s=>String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
   $('resCount').textContent=`${data.voters.length} ${data.voters.length===1?'person has':'people have'} voted`;
-  let html='';
-  // Top songs by likes
-  if(data.songs.length){
-    html+='<h3 style="font-size:16px;font-weight:800;margin:6px 0 10px">🔥 Top songs by likes</h3>';
-    data.songs.slice(0,15).forEach((s,i)=>{
-      if(s.likes===0)return;
-      html+=`<div class="person"><h4><span>${i+1}. ${esc(s.song)}</span><span class="cnt">♥ ${s.likes}${s.skips?' · ✕ '+s.skips:''}</span></h4>`;
-      if(s.likedBy.length)html+=`<div class="songs">liked by ${s.likedBy.map(esc).join(', ')}</div>`;
-      html+='</div>';
+
+  const f=_campFilter.trim().toLowerCase();
+  const matchSong=s=>!f||s.song.toLowerCase().includes(f);
+  const matchPerson=(n,p)=>!f||n.toLowerCase().includes(f)||p.likes.some(x=>x.toLowerCase().includes(f));
+
+  // --- Top songs (ranked by likes, with like/skip bar) ---
+  const songs=(data.songs||[]).filter(s=>(s.likes>0||s.skips>0)&&matchSong(s));
+  let songsHtml='';
+  if(songs.length){
+    songs.slice(0,50).forEach((s,i)=>{
+      const tot=s.likes+s.skips||1;
+      const lp=Math.round(s.likes/tot*100), sp=100-lp;
+      const by=s.likedBy&&s.likedBy.length?`<div class="vsub">♥ ${s.likedBy.slice(0,6).map(esc).join(', ')}${s.likedBy.length>6?` +${s.likedBy.length-6}`:''}</div>`:'';
+      songsHtml+=`<div class="vrow">
+        <div class="vrank">${i+1}</div>
+        <div class="vmain">
+          <div class="vtitle">${esc(s.song)}</div>
+          ${by}
+          <div class="vbar"><div class="vlike" style="width:${lp}%"></div><div class="vskip" style="width:${sp}%"></div></div>
+        </div>
+        <div class="vstat"><span class="vl">♥ ${s.likes}</span>${s.skips?`<span class="vs">✕ ${s.skips}</span>`:''}</div>
+      </div>`;
     });
-  }
-  // Per person
-  const names=Object.keys(data.byPerson).sort();
+  }else songsHtml='<div class="vempty">No songs match your search.</div>';
+
+  // --- By person ---
+  const names=Object.keys(data.byPerson||{}).filter(n=>matchPerson(n,data.byPerson[n])).sort();
+  let pplHtml='';
   if(names.length){
-    html+='<h3 style="font-size:16px;font-weight:800;margin:18px 0 10px">🎧 By person</h3>';
     names.forEach(n=>{
       const p=data.byPerson[n];
-      html+=`<div class="person"><h4><span>${esc(n)}</span><span class="cnt">♥ ${p.likes.length}</span></h4>`;
-      if(p.likes.length)html+=`<div class="songs">${p.likes.map(esc).join(' · ')}</div>`;
-      else html+='<div class="songs" style="opacity:.6">no likes yet</div>';
-      html+='</div>';
+      const chips=p.likes.length?p.likes.map(x=>`<span class="vchip">${esc(x)}</span>`).join(''):'<span style="opacity:.5;font-size:12px">no likes yet</span>';
+      pplHtml+=`<div class="person"><h4><span>${esc(n)}</span><span class="cnt">♥ ${p.likes.length}</span></h4><div>${chips}</div></div>`;
     });
+  }else pplHtml='<div class="vempty">No people match your search.</div>';
+
+  ppl.innerHTML=`
+    <div class="vsearch"><span class="si">🔎</span><input id="vfilter" type="text" placeholder="Filter songs or people…" value="${esc(_campFilter)}"></div>
+    <div class="vsec" id="vsec-songs">
+      <div class="vsec-head" data-sec="songs"><span class="chev">▼</span> 🔥 Top songs <span class="vcount">${songs.length}</span></div>
+      <div class="vsec-body">${songsHtml}</div>
+    </div>
+    <div class="vsec" id="vsec-people">
+      <div class="vsec-head" data-sec="people"><span class="chev">▼</span> 🎧 By person <span class="vcount">${names.length}</span></div>
+      <div class="vsec-body">${pplHtml}</div>
+    </div>`;
+
+  // wire filter (preserve focus + caret across re-render)
+  const inp=$('vfilter');
+  if(inp){
+    inp.oninput=()=>{_campFilter=inp.value;const pos=inp.selectionStart;renderCampVotes();const ni=$('vfilter');if(ni){ni.focus();try{ni.setSelectionRange(pos,pos);}catch(e){}}};
   }
-  if(!html)html='<div style="opacity:.8;text-align:center;padding:20px">No votes yet — be the first!</div>';
-  ppl.innerHTML=html;
+  // wire collapse toggles + set max-height for smooth animation
+  ppl.querySelectorAll('.vsec-head').forEach(h=>{
+    const sec=h.parentElement, body=h.nextElementSibling;
+    body.style.maxHeight=body.scrollHeight+'px';
+    h.onclick=()=>{
+      const collapsed=sec.classList.toggle('collapsed');
+      if(!collapsed)body.style.maxHeight=body.scrollHeight+'px';
+    };
+  });
 }
 
 /* when leaving camp-votes back to personal list, restore it */
