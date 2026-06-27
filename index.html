@@ -66,6 +66,13 @@
 
   .stage{flex:1;position:relative;display:flex;align-items:center;justify-content:center;padding:8px 16px 0;min-height:0}
   .deck{position:relative;width:100%;max-width:360px;height:100%;max-height:480px;margin:0 auto}
+  .deck.reshuffling{animation:reshuffle .42s ease}
+  @keyframes reshuffle{
+    0%{opacity:1;transform:scale(1) rotate(0)}
+    35%{opacity:.15;transform:scale(.82) rotate(-4deg)}
+    60%{opacity:.15;transform:scale(.82) rotate(4deg)}
+    100%{opacity:1;transform:scale(1) rotate(0)}
+  }
 
   .card{position:absolute;inset:0;border-radius:26px;overflow:hidden;
         background:var(--cream);box-shadow:var(--shadow);
@@ -617,7 +624,7 @@ function buildDeck(autoplay){
   });
   if(autoplay&&topCard&&topSong){
     if(pendingAutoplay)clearTimeout(pendingAutoplay);
-    pendingAutoplay=setTimeout(()=>{pendingAutoplay=null;autoplayCard(topCard,topSong);},450);
+    pendingAutoplay=setTimeout(()=>{pendingAutoplay=null;autoplayCard(topCard,topSong);},120);
   }
 }
 function makeCard(song,rank){
@@ -916,7 +923,7 @@ function fly(card,dir){
   card.style.transform=`translate(${dir*600}px,${ -40}px) rotate(${dir*35}deg)`;
   card.style.opacity=0;
   decide(dir);
-  setTimeout(()=>{buildDeck(true);},260);
+  setTimeout(()=>{buildDeck(true);},160);
 }
 
 function decide(dir){
@@ -930,8 +937,8 @@ function decide(dir){
 }
 
 /* buttons */
-$('like').onclick=()=>{stopAudio();const top=$('deck').lastChild;if(top&&idx<order.length){top.style.transition='transform .4s ease,opacity .4s ease';top.style.transform='translate(600px,-40px) rotate(35deg)';top.style.opacity=0;decide(1);setTimeout(()=>buildDeck(true),260);}};
-$('nope').onclick=()=>{stopAudio();const top=$('deck').lastChild;if(top&&idx<order.length){top.style.transition='transform .4s ease,opacity .4s ease';top.style.transform='translate(-600px,-40px) rotate(-35deg)';top.style.opacity=0;decide(-1);setTimeout(()=>buildDeck(true),260);}};
+$('like').onclick=()=>{stopAudio();const top=$('deck').lastChild;if(top&&idx<order.length){top.style.transition='transform .4s ease,opacity .4s ease';top.style.transform='translate(600px,-40px) rotate(35deg)';top.style.opacity=0;decide(1);setTimeout(()=>buildDeck(true),160);}};
+$('nope').onclick=()=>{stopAudio();const top=$('deck').lastChild;if(top&&idx<order.length){top.style.transition='transform .4s ease,opacity .4s ease';top.style.transform='translate(-600px,-40px) rotate(-35deg)';top.style.opacity=0;decide(-1);setTimeout(()=>buildDeck(true),160);}};
 $('undo').onclick=()=>{
   if(!history.length)return;
   stopAudio();
@@ -1151,20 +1158,31 @@ document.getElementById('adminToggle').onclick=function(){
   function sync(){if(val)val.textContent=label(experimentalis);}
   sync();
   let reorderTimer=null;
+  function regenerate(){
+    // Rebuild the upcoming list from the new weighting — a fresh top card too,
+    // so the deck visibly reflects the new vibe. Keeps already-swiped songs out
+    // (they're in the seen-set) but otherwise starts a new sequence.
+    stopAudio();
+    const fresh=unseenOrder();                 // weighted by the new slider value
+    if(!fresh.length){ buildDeck(); return; }
+    order=order.slice(0,idx).concat(fresh);    // keep swiped history, replace the rest
+    // idx already points at the first upcoming slot, which is now fresh[0]
+    const deck=document.getElementById('deck');
+    deck.classList.remove('reshuffling');
+    // force reflow so the animation restarts even on rapid changes
+    void deck.offsetWidth;
+    deck.classList.add('reshuffling');
+    // swap the cards at the dimmest point of the animation
+    setTimeout(()=>{ buildDeck(); },150);
+    setTimeout(()=>{ deck.classList.remove('reshuffling'); },460);
+  }
   sl.addEventListener('input',()=>{
     experimentalis=sl.value/100;
     try{localStorage.setItem('mb_exp',String(experimentalis));}catch(e){}
     sync();
-    // debounce the re-ordering so dragging stays smooth
+    // debounce so dragging the slider stays smooth; regenerate once it settles
     if(reorderTimer)clearTimeout(reorderTimer);
-    reorderTimer=setTimeout(()=>{
-      // keep songs already swiped AND the current card; re-weight the rest
-      const keep=order.slice(0,idx+1);
-      const keepSet=new Set(keep.map(i=>songKey(SONGS[i])));
-      const rest=unseenOrder().filter(i=>!keepSet.has(songKey(SONGS[i])));
-      order=keep.concat(rest);
-      buildDeck();
-    },250);
+    reorderTimer=setTimeout(regenerate,260);
   });
 })();
 
