@@ -18,7 +18,7 @@ async function blob() {
 }
 
 const CACHE_HOURS = 12;
-const DECK_VERSION = 3;   // bump when song shape changes (forces cache rebuild)
+const DECK_VERSION = 4;   // bump when song shape changes (forces cache rebuild)
 const MAX = 50;           // YouTube mostPopular caps at 50 per region
 const COLORS = ["#E8623B", "#F2A43B", "#2BB3A3", "#7A5CB0", "#9B59B6", "#E8623B"];
 const CACHE_PATH = "songs/top.json";
@@ -34,14 +34,22 @@ async function fetchJson(url, bust) {
   try { return await r.json(); } catch { return null; }
 }
 
-/* ---------- Blob cache ---------- */
+// Read a private blob's JSON by pathname (using the store token).
+async function readPrivateJson(pathname) {
+  try {
+    const { get } = await blob();
+    const result = await get(pathname, { access: "private" });
+    if (!result || result.statusCode !== 200 || !result.stream) return null;
+    const text = await new Response(result.stream).text();
+    return JSON.parse(text);
+  } catch { return null; }
+}
+
+/* ---------- Blob cache (private store) ---------- */
 async function readCache() {
   if (!blobConfigured()) return null;
   try {
-    const { list } = await blob();
-    const { blobs } = await list({ prefix: CACHE_PATH, limit: 1 });
-    if (!blobs || !blobs.length || blobs[0].pathname !== CACHE_PATH) return null;
-    const data = await fetchJson(blobs[0].url, true);
+    const data = await readPrivateJson(CACHE_PATH);
     if (!data || !data.fetchedAt || !Array.isArray(data.songs)) return null;
     // invalidate caches written by an older deck schema (no previews etc.)
     if (data.v !== DECK_VERSION) return { ...data, stale: true };
@@ -55,8 +63,8 @@ async function writeCache(payload) {
   try {
     const { put } = await blob();
     await put(CACHE_PATH, JSON.stringify(payload), {
-      access: "public", contentType: "application/json",
-      allowOverwrite: true, addRandomSuffix: false, cacheControlMaxAge: 0,
+      access: "private", contentType: "application/json",
+      allowOverwrite: true, addRandomSuffix: false,
     });
   } catch (e) { console.error("top cache write failed", e); }
 }

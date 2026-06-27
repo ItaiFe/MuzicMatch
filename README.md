@@ -97,9 +97,10 @@ vercel --prod            # deploy to the live URL
 The login + voting feature stores everyone's choices centrally so you can
 see the whole camp's votes in one place. It uses **Vercel Blob** — each
 person's votes live in their own small JSON file under `votes/`. The
-filename is a salted hash of the person's name (so the public file URL
-can't be guessed from someone's name), while their real name is stored
-inside the file.
+filename is a salted hash of the person's name, and the votes (plus the
+cached song deck) are stored with **private access**, so the files are
+never publicly fetchable — the app reads them back server-side using the
+store token.
 
 ### Why per-person files
 
@@ -112,9 +113,14 @@ ever writes to anyone else's file.
 ### Set it up (about 1 minute)
 
 1. In your Vercel project: **Storage -> Create Database -> Blob**.
-2. Create the store and **connect it to this project**.
-3. Vercel injects `BLOB_READ_WRITE_TOKEN` automatically.
-4. Redeploy so the functions pick it up.
+2. Choose **Private** access (the code reads/writes private blobs).
+3. Create the store and **connect it to this project**.
+4. Vercel injects `BLOB_READ_WRITE_TOKEN` automatically.
+5. Redeploy so the functions pick it up.
+
+The code uses `access: "private"` everywhere. If your store is Public
+instead, either recreate it as Private, or the writes will fail with
+"Cannot use public access on a private store" (and vice versa).
 
 No schema, no tables, no marketplace step. If `BLOB_READ_WRITE_TOKEN`
 isn't set, the login screen still works but voting/results return

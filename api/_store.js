@@ -1,11 +1,10 @@
-// Vote storage on Vercel Blob, sharded per person so concurrent writers
-// never collide (each person only ever writes their own file).
+// Vote storage on Vercel Blob (PRIVATE store), sharded per person so
+// concurrent writers never collide (each person only ever writes their file).
 //
-// Layout:  votes/<safeName>.json  ->  { name, votes: { "<song — artist>": "like"|"skip" } }
+// Layout:  votes/<hash>.json  ->  { name, votes: { "<song — artist>": "like"|"skip" } }
 //
-// Why per-person files: Blob has no atomic field update. If everyone wrote
-// one shared file, two simultaneous swipes would race and lose a vote.
-// Giving each person their own file removes the race entirely.
+// Private access: files are NOT publicly fetchable. We read them back with
+// get(pathname, { access: "private" }) using the store token, never by URL.
 
 import crypto from "crypto";
 
@@ -22,10 +21,8 @@ export function blobConfigured() {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 }
 
-// Turn a display name into a safe, stable, NON-guessable file path.
-// We hash the lowercased name with a per-deployment secret so the public
-// blob URL can't be guessed from someone's name alone. Stable per person
-// (same name -> same file), so re-voting overwrites rather than duplicates.
+// Stable, non-guessable file path: HMAC of the lowercased name with a secret,
+// so even though it's a private store, names aren't embedded in paths.
 function pathFor(name) {
   const norm = name.toLowerCase().trim();
   const salt = process.env.CAMP_SECRET || "midburn";
@@ -33,34 +30,38 @@ function pathFor(name) {
   return "votes/" + h + ".json";
 }
 
-async function fetchJson(url) {
-  // bust the CDN cache so we read the latest after an overwrite
-  const r = await fetch(url + "?t=" + Date.now(), { cache: "no-store" });
-  if (!r.ok) return null;
-  try { return await r.json(); } catch { return null; }
+// Read one private blob's JSON by pathname. Returns null if missing/unreadable.
+async function readPrivate(pathname) {
+  const { get } = await blob();
+  try {
+    const result = await get(pathname, { access: "private" });
+    if (!result || result.statusCode !== 200 || !result.stream) return null;
+    // stream -> text -> json
+    const res = new Response(result.stream);
+    const text = await res.text();
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 // Record/overwrite one person's vote on one song.
 export async function recordVote(songKey, name, choice) {
-  const { put, list } = await blob();
+  const { put } = await blob();
   const path = pathFor(name);
 
-  // read existing file for this person (if any) so we merge, not clobber
+  // merge with the person's existing file so we don't clobber prior votes
   let current = { name, votes: {} };
-  const { blobs } = await list({ prefix: path, limit: 1 });
-  if (blobs && blobs.length && blobs[0].pathname === path) {
-    const existing = await fetchJson(blobs[0].url);
-    if (existing && existing.votes) current = { name, votes: existing.votes };
-  }
+  const existing = await readPrivate(path);
+  if (existing && existing.votes) current = { name, votes: existing.votes };
 
   current.votes[songKey] = choice;
 
   await put(path, JSON.stringify(current), {
-    access: "public",
+    access: "private",
     contentType: "application/json",
     allowOverwrite: true,
     addRandomSuffix: false,
-    cacheControlMaxAge: 0,
   });
 }
 
@@ -72,7 +73,7 @@ export async function readAll() {
   const voters = [];
 
   for (const b of blobs || []) {
-    const data = await fetchJson(b.url);
+    const data = await readPrivate(b.pathname);
     if (!data || !data.name) continue;
     voters.push(data.name);
     for (const [songKey, choice] of Object.entries(data.votes || {})) {
