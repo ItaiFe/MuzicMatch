@@ -40,8 +40,8 @@ export default async function handler(req, res) {
   const group = auth.grp === "flamingo" ? "flamingo" : "ext";
 
   try {
-    await recordVote(songKey, auth.name, choice, group);
-    res.status(200).json({ ok: true });
+    const r = await recordVote(songKey, auth.name, choice, group);
+    res.status(200).json({ ok: true, likeCount: r.likeCount, newLike: r.newLike });
   } catch (e) {
     console.error("vote error", e);
     res.status(502).json({ ok: false, error: "store failed", detail: String(e && e.message || e) });

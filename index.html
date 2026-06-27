@@ -89,6 +89,27 @@
                 color:#fff;font-weight:900;font-size:18px;text-shadow:0 1px 2px #0006}
   .vinyl::after{content:"";position:absolute;inset:48%;border-radius:50%;background:#FBF4E6;box-shadow:inset 0 0 0 2px #0003}
   @keyframes spin{to{transform:rotate(360deg)}}
+  /* ---- Rank-up celebration ---- */
+  .spark-layer{position:fixed;inset:0;z-index:9999;pointer-events:none;overflow:hidden;
+        display:flex;align-items:center;justify-content:center}
+  .spark{position:absolute;top:50%;left:50%;opacity:0;will-change:transform,opacity;
+        animation:sparkFly 1.2s ease-out forwards;text-shadow:0 1px 4px #0006}
+  @keyframes sparkFly{
+    0%{opacity:0;transform:translate(-50%,-50%) scale(.3) rotate(0)}
+    15%{opacity:1}
+    100%{opacity:0;transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(1.1) rotate(var(--rot))}
+  }
+  .spark-pop{position:absolute;top:44%;left:50%;transform:translate(-50%,-50%) scale(.4);
+        background:linear-gradient(120deg,var(--gold),var(--ember));color:#fff;font-size:16px;font-weight:900;
+        padding:10px 18px;border-radius:999px;box-shadow:0 8px 24px -6px #0008,0 0 0 2px #ffffff55 inset;
+        white-space:nowrap;opacity:0;animation:popUp 1.3s cubic-bezier(.2,1.4,.4,1) forwards;text-shadow:0 1px 3px #0006}
+  .spark-pop b{font-weight:900}
+  @keyframes popUp{
+    0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}
+    20%{opacity:1;transform:translate(-50%,-50%) scale(1.05)}
+    70%{opacity:1;transform:translate(-50%,calc(-50% - 18px)) scale(1)}
+    100%{opacity:0;transform:translate(-50%,calc(-50% - 40px)) scale(.95)}
+  }
 
   .flag{position:absolute;top:14px;left:14px;font-size:30px;filter:drop-shadow(0 2px 3px #0005)}
   .rank{position:absolute;top:14px;right:14px;background:#000000aa;color:#fff;border-radius:999px;
@@ -436,12 +457,48 @@ function showWhoami(){
 async function sendVote(song,choice){
   if(!AUTH||!AUTH.token)return;
   try{
-    await fetch('/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},
+    const r=await fetch('/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({token:AUTH.token,song:song.s,artist:song.a,choice})});
+    const d=await r.json().catch(()=>null);
+    // Gamification: if our like pushed this song's running total to 2+ (i.e. we
+    // weren't the first to like it), celebrate — our like moved it up the ranks.
+    if(d&&d.ok&&choice==='like'&&d.newLike&&typeof d.likeCount==='number'&&d.likeCount>=2){
+      celebrateRankUp(d.likeCount);
+    }
   }catch(e){/* offline-tolerant: local state still updates */}
 }
 
-/* ---------- Song pool: curated fallback (used if live fetch fails) ---------- */
+/* Gamification: a burst of stars + sparkles when a like ranks a song up.
+   Bigger like counts get a slightly bigger burst. */
+function celebrateRankUp(count){
+  const layer=document.createElement('div');
+  layer.className='spark-layer';
+  const emojis=['⭐','✨','🌟','💫','🔥'];
+  const n=Math.min(28,12+count*2);
+  for(let i=0;i<n;i++){
+    const s=document.createElement('span');
+    s.className='spark';
+    s.textContent=emojis[Math.floor(Math.random()*emojis.length)];
+    const ang=Math.random()*Math.PI*2;
+    const dist=70+Math.random()*150;
+    const dx=Math.cos(ang)*dist, dy=Math.sin(ang)*dist-40;
+    s.style.setProperty('--dx',dx+'px');
+    s.style.setProperty('--dy',dy+'px');
+    s.style.setProperty('--rot',(Math.random()*720-360)+'deg');
+    s.style.fontSize=(14+Math.random()*20)+'px';
+    s.style.animationDelay=(Math.random()*120)+'ms';
+    layer.appendChild(s);
+  }
+  // a center "ranked up!" pop
+  const pop=document.createElement('div');
+  pop.className='spark-pop';
+  pop.innerHTML='⬆️ <b>Moved up!</b>';
+  layer.appendChild(pop);
+  document.body.appendChild(layer);
+  // gentle haptic if supported
+  try{navigator.vibrate&&navigator.vibrate(30);}catch(e){}
+  setTimeout(()=>{layer.remove();},1400);
+}
 const FALLBACK_SONGS = [
   {s:"Flowers",a:"Miley Cyrus",c:"USA",f:"🇺🇸",g:"Pop",col:"#E8623B"},
   {s:"As It Was",a:"Harry Styles",c:"UK",f:"🇬🇧",g:"Pop",col:"#F2A43B"},

@@ -47,6 +47,9 @@ async function readPrivate(pathname) {
 
 // Record/overwrite one person's vote on one song. `group` is "flamingo" or
 // "ext" and is stored on the person's file (latest login wins).
+// Returns { likeCount, newLike } where likeCount is this song's running like
+// total and newLike is true only if THIS call added a like that wasn't there
+// before (used for the gamification effect).
 export async function recordVote(songKey, name, choice, group) {
   const { put } = await blob();
   const path = pathFor(name);
@@ -56,6 +59,7 @@ export async function recordVote(songKey, name, choice, group) {
   const existing = await readPrivate(path);
   if (existing && existing.votes) current = { name, votes: existing.votes, group: existing.group };
 
+  const prevChoice = current.votes[songKey];
   current.votes[songKey] = choice;
   if (group) current.group = group;
 
@@ -65,6 +69,33 @@ export async function recordVote(songKey, name, choice, group) {
     allowOverwrite: true,
     addRandomSuffix: false,
   });
+
+  // Maintain a tiny per-song like tally so we can tell the client the song's
+  // running like count cheaply (no full scan). Only changes when this user's
+  // like status for the song actually changes.
+  let likeCount = null, newLike = false;
+  const becameLike = choice === "like" && prevChoice !== "like";
+  const removedLike = choice !== "like" && prevChoice === "like";
+  if (becameLike || removedLike) {
+    try {
+      const tally = (await readPrivate("votes/_tally.json")) || {};
+      const cur = Number(tally[songKey] || 0);
+      const next = Math.max(0, cur + (becameLike ? 1 : -1));
+      tally[songKey] = next;
+      await put("votes/_tally.json", JSON.stringify(tally), {
+        access: "private",
+        contentType: "application/json",
+        allowOverwrite: true,
+        addRandomSuffix: false,
+      });
+      likeCount = next;
+      newLike = becameLike;
+    } catch (e) {
+      // tally is best-effort; never fail a vote because of it
+      console.error("tally update failed", e);
+    }
+  }
+  return { likeCount, newLike };
 }
 
 // Read every person's file and return combined data, with each voter's group
