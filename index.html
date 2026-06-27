@@ -234,6 +234,24 @@
 
   /* ---- Camp votes: search + collapsible sections ---- */
   .vsearch{width:100%;max-width:440px;margin:4px 0 14px;position:relative}
+  .export-bar{width:100%;max-width:440px;margin:0 0 14px;padding:13px 14px;border-radius:16px;
+        background:linear-gradient(135deg,rgba(43,179,163,.22),rgba(122,92,176,.22));
+        border:1px solid #ffffff2a;box-shadow:0 6px 18px -10px #0007}
+  .export-title{color:#fff;font-size:13px;font-weight:900;margin-bottom:10px;text-shadow:0 1px 3px #0008}
+  .export-row{display:flex;flex-wrap:wrap;gap:8px}
+  .exp-btn{flex:1;min-width:130px;border:none;cursor:pointer;border-radius:999px;padding:10px 12px;
+        font-size:12.5px;font-weight:800;background:#ffffff1c;color:#fff;border:1px solid #ffffff33;
+        display:inline-flex;align-items:center;justify-content:center;gap:5px;transition:background .15s}
+  .exp-btn:active{transform:scale(.97)}
+  .exp-btn.yt{background:#c4302b;border-color:#c4302b;color:#fff;box-shadow:0 2px 10px #c4302b66}
+  .export-note{color:#fff;opacity:.75;font-size:10.5px;font-weight:600;margin-top:8px;text-align:center}
+  .grp-toggle{display:flex;gap:6px;width:100%;max-width:440px;margin:0 0 14px;background:#ffffff12;
+        border:1px solid #ffffff22;border-radius:999px;padding:4px}
+  .grp-btn{flex:1;border:none;cursor:pointer;border-radius:999px;padding:8px 6px;font-size:12px;font-weight:800;
+        background:transparent;color:#fff;opacity:.7;display:inline-flex;align-items:center;justify-content:center;gap:4px;transition:all .15s}
+  .grp-btn span{font-size:10px;opacity:.8;background:#ffffff22;border-radius:999px;padding:1px 6px}
+  .grp-btn.on{background:var(--gold);color:#3a2410;opacity:1}
+  .grp-btn.on span{background:#00000022}
   .vsearch input{width:100%;box-sizing:border-box;background:#ffffff14;border:1px solid #ffffff33;
         color:var(--cream);border-radius:999px;padding:11px 16px 11px 40px;font-size:14px;font-weight:600;outline:none}
   .vsearch input::placeholder{color:#ffffff77}
@@ -402,7 +420,7 @@ async function doLogin(){
       const msg=data.error==='wrong passphrase'?'That passphrase isn\'t right':data.error==='wrong admin password'?'Admin password isn\'t right':(data.error||'Login failed');
       err.textContent=msg;btn.disabled=false;btn.textContent='Let me in →';return;
     }
-    AUTH={token:data.token,name:data.name,admin:!!data.admin};saveAuth();
+    AUTH={token:data.token,name:data.name,admin:!!data.admin,group:data.group||'ext'};saveAuth();
     document.getElementById('login').style.display='none';
     startApp();
   }catch(e){err.textContent='Network error — try again';btn.disabled=false;btn.textContent='Let me in →';}
@@ -1042,7 +1060,7 @@ $('campVotes').onclick=async()=>{
   if(!AUTH||!AUTH.token){toast('Please log in');return;}
   const ppl=$('ppl');const list=$('list');
   list.style.display='none';
-  _campData=null;_campFilter='';
+  _campData=null;_campFilter='';_campGroup='all';
   ppl.innerHTML='<div class="vempty">Loading everyone\'s votes…</div>';
   try{
     const res=await fetch('/api/results?token='+encodeURIComponent(AUTH.token));
@@ -1052,20 +1070,23 @@ $('campVotes').onclick=async()=>{
   }catch(e){ppl.innerHTML='<div class="vempty">Network error loading votes</div>';}
 };
 
-let _campData=null, _campFilter='';
+let _campData=null, _campFilter='', _campGroup='all';
 function renderCampVotes(data){
   if(data)_campData=data;
   data=_campData;
   const ppl=$('ppl');
   const esc=s=>String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+  const counts=data.counts||{all:data.voters.length,flamingo:0,ext:0};
   $('resCount').textContent=`${data.voters.length} ${data.voters.length===1?'person has':'people have'} voted`;
 
   const f=_campFilter.trim().toLowerCase();
   const matchSong=s=>!f||s.song.toLowerCase().includes(f);
   const matchPerson=(n,p)=>!f||n.toLowerCase().includes(f)||p.likes.some(x=>x.toLowerCase().includes(f));
 
-  // --- Top songs (ranked by likes, with like/skip bar) ---
-  const songs=(data.songs||[]).filter(s=>(s.likes>0||s.skips>0)&&matchSong(s));
+  // --- Top songs for the selected group (all / flamingo / ext) ---
+  const byGroup=data.songsByGroup||{all:data.songs||[]};
+  const groupSongs=byGroup[_campGroup]||byGroup.all||[];
+  const songs=groupSongs.filter(s=>(s.likes>0||s.skips>0)&&matchSong(s));
   let songsHtml='';
   if(songs.length){
     songs.slice(0,50).forEach((s,i)=>{
@@ -1096,7 +1117,21 @@ function renderCampVotes(data){
   }else pplHtml='<div class="vempty">No people match your search.</div>';
 
   ppl.innerHTML=`
+    <div class="export-bar">
+      <div class="export-title">📤 Export the winning playlist</div>
+      <div class="export-row">
+        <button class="exp-btn yt" id="expYouTube">▶ Open top 25 on YouTube</button>
+        <button class="exp-btn" id="expCopy">📋 Copy ranked list</button>
+        <button class="exp-btn" id="expCsv">⬇ Download CSV</button>
+      </div>
+      <div class="export-note">Exports the <b>${_campGroup==='flamingo'?'🦩 Flamingo camp':_campGroup==='ext'?'👥 External':'🌐 everyone'}</b> ranking · switch groups below.</div>
+    </div>
     <div class="vsearch"><span class="si">🔎</span><input id="vfilter" type="text" placeholder="Filter songs or people…" value="${esc(_campFilter)}"></div>
+    <div class="grp-toggle" id="grpToggle">
+      <button class="grp-btn${_campGroup==='all'?' on':''}" data-grp="all">🌐 Everyone <span>${counts.all}</span></button>
+      <button class="grp-btn${_campGroup==='flamingo'?' on':''}" data-grp="flamingo">🦩 Flamingo <span>${counts.flamingo}</span></button>
+      <button class="grp-btn${_campGroup==='ext'?' on':''}" data-grp="ext">👥 External <span>${counts.ext}</span></button>
+    </div>
     <div class="vsec" id="vsec-songs">
       <div class="vsec-head" data-sec="songs"><span class="chev">▼</span> 🔥 Top songs <span class="vcount">${songs.length}</span></div>
       <div class="vsec-body">${songsHtml}</div>
@@ -1105,6 +1140,13 @@ function renderCampVotes(data){
       <div class="vsec-head" data-sec="people"><span class="chev">▼</span> 🎧 By person <span class="vcount">${names.length}</span></div>
       <div class="vsec-body">${pplHtml}</div>
     </div>`;
+
+  wireExport();
+
+  // wire group toggle (flamingo vs external vs everyone)
+  ppl.querySelectorAll('.grp-btn').forEach(btn=>{
+    btn.onclick=()=>{_campGroup=btn.getAttribute('data-grp');renderCampVotes();};
+  });
 
   // wire filter (preserve focus + caret across re-render)
   const inp=$('vfilter');
@@ -1120,6 +1162,49 @@ function renderCampVotes(data){
       if(!collapsed)body.style.maxHeight=body.scrollHeight+'px';
     };
   });
+}
+
+/* Build the ranked winner list (by likes, then fewer skips) and wire the
+   three export actions in the admin panel. */
+function rankedWinners(){
+  const byGroup=(_campData&&_campData.songsByGroup)||{all:(_campData&&_campData.songs)||[]};
+  const songs=(byGroup[_campGroup]||byGroup.all||[]).filter(s=>s.likes>0);
+  return songs.slice().sort((a,b)=>(b.likes-a.likes)||(a.skips-b.skips));
+}
+function wireExport(){
+  const yt=$('expYouTube'), cp=$('expCopy'), csv=$('expCsv');
+  if(yt)yt.onclick=()=>{
+    const list=rankedWinners().slice(0,25);
+    if(!list.length){toast('No liked songs yet');return;}
+    // open #1 on YouTube; copy the full ordered list so they can queue the rest
+    const q=encodeURIComponent(list[0].song+' official');
+    window.open('https://www.youtube.com/results?search_query='+q,'_blank','noopener');
+    const text=list.map((s,i)=>`${i+1}. ${s.song}`).join('\n');
+    navigator.clipboard&&navigator.clipboard.writeText(text).catch(()=>{});
+    toast('Opened #1 on YouTube · full list copied');
+  };
+  if(cp)cp.onclick=()=>{
+    const list=rankedWinners();
+    if(!list.length){toast('No liked songs yet');return;}
+    const text='🔥 Midburn Sounds — camp playlist\n\n'+
+      list.map((s,i)=>`${i+1}. ${s.song}  (♥${s.likes}${s.skips?` ✕${s.skips}`:''})`).join('\n');
+    if(navigator.clipboard){navigator.clipboard.writeText(text).then(()=>toast('Ranked list copied')).catch(()=>toast('Copy failed'));}
+    else toast('Copy not supported');
+  };
+  if(csv)csv.onclick=()=>{
+    const list=rankedWinners();
+    if(!list.length){toast('No liked songs yet');return;}
+    const esc=v=>`"${String(v).replace(/"/g,'""')}"`;
+    const rows=[['rank','song','likes','skips','liked_by']];
+    list.forEach((s,i)=>rows.push([i+1,s.song,s.likes,s.skips,(s.likedBy||[]).join('; ')]));
+    const csvText=rows.map(r=>r.map(esc).join(',')).join('\r\n');
+    const blob=new Blob([csvText],{type:'text/csv'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download='midburn-playlist.csv';document.body.appendChild(a);a.click();
+    setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},100);
+    toast('CSV downloaded');
+  };
 }
 
 /* when leaving camp-votes back to personal list, restore it */

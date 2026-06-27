@@ -37,9 +37,10 @@ export default async function handler(req, res) {
   }
 
   const songKey = (song + " — " + artist).slice(0, 200);
+  const group = auth.grp === "flamingo" ? "flamingo" : "ext";
 
   try {
-    await recordVote(songKey, auth.name, choice);
+    await recordVote(songKey, auth.name, choice, group);
     res.status(200).json({ ok: true });
   } catch (e) {
     console.error("vote error", e);

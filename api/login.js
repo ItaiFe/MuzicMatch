@@ -31,6 +31,7 @@ export default async function handler(req, res) {
   }
 
   const PASS = process.env.CAMP_PASSPHRASE;
+  const FLAMINGO = process.env.FLAMINGO_PASSPHRASE; // optional 2nd passphrase
   const SECRET = process.env.CAMP_SECRET;
   const ADMIN = process.env.ADMIN_PASSWORD; // optional
   if (!PASS || !SECRET) {
@@ -51,7 +52,14 @@ export default async function handler(req, res) {
     return;
   }
 
-  if (!safeEqual(passphrase, PASS)) {
+  // Two valid passphrases decide the group: the flamingo (internal) one tags
+  // the voter as "flamingo"; the general camp one tags them "ext" (external).
+  let group = null;
+  if (FLAMINGO && safeEqual(passphrase, FLAMINGO)) {
+    group = "flamingo";
+  } else if (safeEqual(passphrase, PASS)) {
+    group = "ext";
+  } else {
     res.status(401).json({ ok: false, error: "wrong passphrase" });
     return;
   }
@@ -69,8 +77,8 @@ export default async function handler(req, res) {
     }
   }
 
-  const payload = { name, t: Date.now() };
+  const payload = { name, t: Date.now(), grp: group };
   if (isAdmin) payload.admin = true;
   const token = sign(payload, SECRET);
-  res.status(200).json({ ok: true, token, name, admin: isAdmin });
+  res.status(200).json({ ok: true, token, name, admin: isAdmin, group });
 }

@@ -41,6 +41,7 @@ You need a free Vercel account: https://vercel.com/signup
 |------------------|----------------------------------------|----------|
 | `YT_API_KEY`     | your YouTube Data API v3 key           | yes      |
 | `CAMP_PASSPHRASE`| the shared passphrase people type to get in | yes |
+| `FLAMINGO_PASSPHRASE` | separate passphrase for internal Flamingo-camp members; their votes are tagged so results can be split | optional |
 | `CAMP_SECRET`    | any long random string (signs login tokens) | yes |
 | `ADMIN_PASSWORD` | password that unlocks the results panel | recommended |
 | `ALLOWED_ORIGIN` | your live URL, e.g. `https://midburn-sounds.vercel.app` | recommended |

@@ -45,17 +45,19 @@ async function readPrivate(pathname) {
   }
 }
 
-// Record/overwrite one person's vote on one song.
-export async function recordVote(songKey, name, choice) {
+// Record/overwrite one person's vote on one song. `group` is "flamingo" or
+// "ext" and is stored on the person's file (latest login wins).
+export async function recordVote(songKey, name, choice, group) {
   const { put } = await blob();
   const path = pathFor(name);
 
   // merge with the person's existing file so we don't clobber prior votes
   let current = { name, votes: {} };
   const existing = await readPrivate(path);
-  if (existing && existing.votes) current = { name, votes: existing.votes };
+  if (existing && existing.votes) current = { name, votes: existing.votes, group: existing.group };
 
   current.votes[songKey] = choice;
+  if (group) current.group = group;
 
   await put(path, JSON.stringify(current), {
     access: "private",
@@ -65,21 +67,24 @@ export async function recordVote(songKey, name, choice) {
   });
 }
 
-// Read every person's file and return combined data.
+// Read every person's file and return combined data, with each voter's group
+// so results can be split (flamingo vs external).
 export async function readAll() {
   const { list } = await blob();
   const { blobs } = await list({ prefix: "votes/" });
   const songs = {};   // songKey -> { name: choice }
   const voters = [];
+  const groupByName = {};   // name -> "flamingo" | "ext"
 
   for (const b of blobs || []) {
     const data = await readPrivate(b.pathname);
     if (!data || !data.name) continue;
     voters.push(data.name);
+    groupByName[data.name] = data.group === "flamingo" ? "flamingo" : "ext";
     for (const [songKey, choice] of Object.entries(data.votes || {})) {
       if (!songs[songKey]) songs[songKey] = {};
       songs[songKey][data.name] = choice;
     }
   }
-  return { songs, voters };
+  return { songs, voters, groupByName };
 }
