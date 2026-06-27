@@ -44,8 +44,10 @@ export default async function handler(req, res) {
     try { body = JSON.parse(body); } catch { body = {}; }
   }
   const name = (body.name || "").toString().trim().slice(0, 40);
-  const passphrase = (body.passphrase || "").toString();
-  const adminPass = (body.admin || "").toString();
+  // trim so a stray space/newline (e.g. copied into the env var, or typed by
+  // the user) can't cause a false "wrong passphrase"
+  const passphrase = (body.passphrase || "").toString().trim();
+  const adminPass = (body.admin || "").toString().trim();
 
   if (!name) {
     res.status(400).json({ ok: false, error: "name required" });
@@ -54,13 +56,25 @@ export default async function handler(req, res) {
 
   // Two valid passphrases decide the group: the flamingo (internal) one tags
   // the voter as "flamingo"; the general camp one tags them "ext" (external).
+  const passClean = (PASS || "").trim();
+  const flamingoClean = (FLAMINGO || "").trim();
   let group = null;
-  if (FLAMINGO && safeEqual(passphrase, FLAMINGO)) {
+  if (flamingoClean && safeEqual(passphrase, flamingoClean)) {
     group = "flamingo";
-  } else if (safeEqual(passphrase, PASS)) {
+  } else if (safeEqual(passphrase, passClean)) {
     group = "ext";
   } else {
-    res.status(401).json({ ok: false, error: "wrong passphrase" });
+    // Safe diagnostics: never reveal the actual passphrase, only enough to
+    // tell whether the env var is set and where the mismatch is. Remove later.
+    const diag = {
+      camp_env_set: Boolean(passClean),
+      camp_env_len: passClean.length,
+      flamingo_env_set: Boolean(flamingoClean),
+      typed_len: passphrase.length,
+      first_char_match: passClean && passphrase ? (passClean[0] === passphrase[0]) : false,
+      last_char_match: passClean && passphrase ? (passClean[passClean.length - 1] === passphrase[passphrase.length - 1]) : false,
+    };
+    res.status(401).json({ ok: false, error: "wrong passphrase", diag });
     return;
   }
 
@@ -69,7 +83,7 @@ export default async function handler(req, res) {
   // there's no ambiguity about whether someone is admin.
   let isAdmin = false;
   if (adminPass) {
-    if (ADMIN && safeEqual(adminPass, ADMIN)) {
+    if (ADMIN && safeEqual(adminPass, (ADMIN || "").trim())) {
       isAdmin = true;
     } else {
       res.status(401).json({ ok: false, error: "wrong admin password" });
